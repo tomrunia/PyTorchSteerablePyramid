@@ -22,24 +22,24 @@ import numpy as np
 
 def prepare_grid(m, n):
 
-		x = np.linspace(-(m // 2)/(m / 2), (m // 2)/(m / 2) - (1 - m % 2)*2/m, num=m)
-		y = np.linspace(-(n // 2)/(n / 2), (n // 2)/(n / 2) - (1 - n % 2)*2/n, num=n)
+    x = np.linspace(-(m // 2)/(m / 2), (m // 2)/(m / 2) - (1 - m % 2)*2/m, num=m)
+    y = np.linspace(-(n // 2)/(n / 2), (n // 2)/(n / 2) - (1 - n % 2)*2/n, num=n)
 
-		xv, yv = np.meshgrid(y, x)
+    xv, yv = np.meshgrid(y, x)
 
-		angle = np.arctan2(yv, xv)
+    angle = np.arctan2(yv, xv)
 
-		rad = np.sqrt(xv**2 + yv**2)
-		rad[m//2][n//2] = rad[m//2][n//2 - 1]
-		log_rad = np.log2(rad)
+    rad = np.sqrt(xv**2 + yv**2)
+    rad[m//2][n//2] = rad[m//2][n//2 - 1]
+    log_rad = np.log2(rad)
 
-		return log_rad, angle
+    return log_rad, angle
 
 
 def rcosFn(width, position):
     '''
     https://github.com/LabForComputationalVision/pyPyrTools/blob/master/pyPyrTools/rcosFn.py
-    Return a lookup table (suitable for use by INTERP1) 
+    Return a lookup table (suitable for use by INTERP1)
     containing a "raised cosine" soft threshold function:
 
     Y = VALUES(1) + (VALUES(2)-VALUES(1)) * cos^2( PI/2 * (X - POSITION + WIDTH)/WIDTH )

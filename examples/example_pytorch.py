@@ -24,15 +24,15 @@ import cv2
 
 
 if __name__ == "__main__":
-    
+
     image_file = './assets/lena.jpg'
     im = cv2.imread(image_file, cv2.IMREAD_GRAYSCALE)
-    im = cv2.resize(im, dsize=(200,200))
+    im = cv2.resize(im, dsize=(200, 200))
 
     # Build the complex steerable pyramid
     pyr = SCFpyr(height=5)
     coeff = pyr.build(im)
-    
+
     # Visualization of whole decomposition
     cv2.imshow('coeff', visualize(coeff))
 
