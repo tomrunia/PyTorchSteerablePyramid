@@ -17,15 +17,20 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
-import scipy.misc as sc
+from scipy.misc import factorial
 
 import steerable.utils
+pointOp = steerable.utils.pointOp
 
 ################################################################################
 ################################################################################
 
 class SCFpyr(object):
     '''
+    This is a modified version of buildSFpyr, that constructs a
+    complex-valued steerable pyramid  using Hilbert-transform pairs
+    of filters.  Note that the imaginary parts will *not* be steerable.
+
     Description of this transform appears in: Portilla & Simoncelli,
     International Journal of Computer Vision, 40(1):49-71, Oct 2000.
     Further information: http://www.cns.nyu.edu/~eero/STEERPYR/
@@ -41,10 +46,10 @@ class SCFpyr(object):
 
     '''
 
-    def __init__(self, height=5, nbands=4):
-        self.nbands = nbands  # number of orientation bands
-        self.height = height  # including low-pass and high-pass
-        self.isSample = True
+    def __init__(self, height=5, nbands=4, verbose=False):
+        self.nbands  = nbands  # number of orientation bands
+        self.height  = height  # including low-pass and high-pass
+        self.verbose = verbose
 
     ################################################################################
     # Construction of Steerable Pyramid
@@ -64,10 +69,9 @@ class SCFpyr(object):
         height, width = im.shape
 
         # Check whether im shape allows the pyramid M
-        max_pyr_M = np.floor(np.log2(min(width, height))) - 2
-        if self.height > max_pyr_M:
-            raise ValueError('Error: cannot build pyramid heigher than {} levels.'.format(max_pyr_M))
-
+        max_height_pyr = int(np.floor(np.log2(min(width, height))) - 2)
+        assert max_height_pyr >= self.height, "Cannot buid pyramid heigher than {} levels".format(max_height_pyr)
+        
         # Prepare a grid
         log_rad, angle = steerable.utils.prepare_grid(height, width)
 
@@ -75,11 +79,10 @@ class SCFpyr(object):
         Xrcos, Yrcos = steerable.utils.rcosFn(1, -0.5)
         Yrcos = np.sqrt(Yrcos)
 
-        YIrcos = np.sqrt(1 - Yrcos*Yrcos)
+        YIrcos = np.sqrt(1 - Yrcos**2)
 
-        # TODO: What are these things?
-        lo0mask = steerable.utils.pointOp(log_rad, YIrcos, Xrcos)
-        hi0mask = steerable.utils.pointOp(log_rad, Yrcos, Xrcos)
+        lo0mask = pointOp(log_rad, YIrcos, Xrcos)
+        hi0mask = pointOp(log_rad, Yrcos, Xrcos)
 
         # fftshift: Shift the zero-frequency component to the center of the spectrum.
         # Corresponds to the TensorFlow's fftshift function
@@ -88,7 +91,7 @@ class SCFpyr(object):
         # Low-pass
         lo0dft = imdft * lo0mask
 
-        coeff = self.buildSCFpyrlevs(lo0dft, log_rad, angle, Xrcos, Yrcos, self.height-1)
+        coeff = self._build_levels(lo0dft, log_rad, angle, Xrcos, Yrcos, self.height-1)
 
         # High-pass
         hi0dft = imdft * hi0mask
@@ -100,7 +103,17 @@ class SCFpyr(object):
         return coeff
 
 
-    def buildSCFpyrlevs(self, lodft, log_rad, angle, Xrcos, Yrcos, height):
+    def _build_levels(self, lodft, log_rad, angle, Xrcos, Yrcos, height):
+        '''
+        Recursive function for constructing levels of a complex steerable pyramid. 
+        This is called by buildSCFpyr, and is not usually called directly.
+        '''
+
+        if self.verbose:
+            print('#'*60)
+            print('PyrLevel {}'.format(height))
+            print('  Xrcos, min = {:.3f}, max = {:.3f}, shape = {}'.format(Xrcos.min(), Xrcos.max(), Xrcos.shape))
+            print('  Yrcos, min = {:.3f}, max = {:.3f}, shape = {}'.format(Yrcos.min(), Yrcos.max(), Yrcos.shape))
 
         if height <= 1:
 
@@ -116,25 +129,23 @@ class SCFpyr(object):
             ####################### Orientation bandpass #######################
             ####################################################################
 
-            himask = steerable.utils.pointOp(log_rad, Yrcos, Xrcos)
+            himask = pointOp(log_rad, Yrcos, Xrcos)
 
             lutsize = 1024
             Xcosn = np.pi * np.array(range(-(2*lutsize+1), (lutsize+2)))/lutsize
             order = self.nbands - 1
-            const = np.power(2, 2*order) * np.square(sc.factorial(order)) / (self.nbands * sc.factorial(2*order))
+            const = np.power(2, 2*order) * np.square(factorial(order)) / (self.nbands * factorial(2*order))
 
             alpha = (Xcosn + np.pi) % (2*np.pi) - np.pi
             Ycosn = 2*np.sqrt(const) * np.power(np.cos(Xcosn), order) * (np.abs(alpha) < np.pi/2)
 
             # Loop through all orientation bands
-            orients = []
+            orientations = []
             for b in range(self.nbands):
-                anglemask = steerable.utils.pointOp(
-                    angle, Ycosn, Xcosn + np.pi*b/self.nbands)
-
+                anglemask = pointOp(angle, Ycosn, Xcosn + np.pi*b/self.nbands)
                 banddft = np.power(np.complex(0, -1), self.nbands - 1) * lodft * anglemask * himask
                 band = np.fft.ifft2(np.fft.ifftshift(banddft))
-                orients.append(band)
+                orientations.append(band)
 
             ####################################################################
             ######################## Subsample lowpass #########################
@@ -142,30 +153,59 @@ class SCFpyr(object):
 
             dims = np.array(lodft.shape)
 
-            lostart = np.ceil((dims+0.5)/2) - np.ceil((np.ceil((dims-0.5)/2)+0.5)/2)
-            loend = lostart + np.ceil((dims-0.5)/2)
+            # Both are tuples of size 2
+            low_ind_start = (np.ceil((dims+0.5)/2) - np.ceil((np.ceil((dims-0.5)/2)+0.5)/2)).astype(int)
+            low_ind_end   = (low_ind_start + np.ceil((dims-0.5)/2)).astype(int)
+          
+            # Selection
+            log_rad = log_rad[low_ind_start[0]:low_ind_end[0], low_ind_start[1]:low_ind_end[1]]
+            angle   = angle[low_ind_start[0]:low_ind_end[0], low_ind_start[1]:low_ind_end[1]]
+            lodft   = lodft[low_ind_start[0]:low_ind_end[0], low_ind_start[1]:low_ind_end[1]]
 
-            lostart = lostart.astype(int)
-            loend = loend.astype(int)
+            if self.verbose:
+                print('  low_log_rad, min = {:.3f}, max = {:.3f}, shape = {}'.format(log_rad.min(), log_rad.max(), log_rad.shape))
+                print('  low_angle,   min = {:.3f}, max = {:.3f}, shape = {}'.format(angle.min(), angle.max(), angle.shape))
 
-            log_rad = log_rad[lostart[0]:loend[0], lostart[1]:loend[1]]
-            angle = angle[lostart[0]:loend[0], lostart[1]:loend[1]]
-            lodft = lodft[lostart[0]:loend[0], lostart[1]:loend[1]]
-            YIrcos = np.abs(np.sqrt(1 - Yrcos*Yrcos))
-            lomask = steerable.utils.pointOp(log_rad, YIrcos, Xrcos)
-
+            # Subsampling in frequency domain
+            YIrcos = np.abs(np.sqrt(1 - Yrcos**2))
+            lomask = pointOp(log_rad, YIrcos, Xrcos)
             lodft = lomask * lodft
 
-            # Recursive call
-            coeff = self.buildSCFpyrlevs(lodft, log_rad, angle, Xrcos, Yrcos, height-1)
-            coeff.insert(0, orients)
+            ####################################################################
+            ####################### Recursion next level #######################
+            ####################################################################
+
+            coeff = self._build_levels(lodft, log_rad, angle, Xrcos, Yrcos, height-1)
+            coeff.insert(0, orientations)
 
         return coeff
 
     ################################################################################
     # Reconstruction to Image
 
-    def reconSCFpyrLevs(self, coeff, log_rad, Xrcos, Yrcos, angle):
+    def reconstruct(self, coeff):
+
+        if self.nbands != len(coeff[1]):
+            raise Exception("Unmatched number of orientations")
+
+        M, N = coeff[0].shape
+        log_rad, angle = steerable.utils.prepare_grid(M, N)
+
+        Xrcos, Yrcos = steerable.utils.rcosFn(1, -0.5)
+        Yrcos  = np.sqrt(Yrcos)
+        YIrcos = np.sqrt(np.abs(1 - Yrcos*Yrcos))
+
+        lo0mask = pointOp(log_rad, YIrcos, Xrcos)
+        hi0mask = pointOp(log_rad, Yrcos, Xrcos)
+
+        tempdft = self._reconstruct_levels(coeff[1:], log_rad, Xrcos, Yrcos, angle)
+
+        hidft = np.fft.fftshift(np.fft.fft2(coeff[0]))
+        outdft = tempdft * lo0mask + hidft * hi0mask
+
+        return np.fft.ifft2(np.fft.ifftshift(outdft)).real.astype(int)
+
+    def _reconstruct_levels(self, coeff, log_rad, Xrcos, Yrcos, angle):
 
         if len(coeff) == 1:
 
@@ -180,19 +220,20 @@ class SCFpyr(object):
             ####################### Orientation Residue ########################
             ####################################################################
 
-            himask = steerable.utils.pointOp(log_rad, Yrcos, Xrcos)
+            himask = pointOp(log_rad, Yrcos, Xrcos)
 
             lutsize = 1024
             Xcosn = np.pi * np.array(range(-(2*lutsize+1), (lutsize+2)))/lutsize
             order = self.nbands - 1
-            const = np.power(2, 2*order) * np.square(sc.factorial(order)) / (self.nbands * sc.factorial(2*order))
+            const = np.power(2, 2*order) * np.square(factorial(order)) / (self.nbands * factorial(2*order))
             Ycosn = np.sqrt(const) * np.power(np.cos(Xcosn), order)
 
             orientdft = np.zeros(coeff[0][0].shape)
 
             for b in range(self.nbands):
-                anglemask = steerable.utils.pointOp(
-                    angle, Ycosn, Xcosn + np.pi * b/self.nbands)
+
+                anglemask = pointOp(angle, Ycosn, Xcosn + np.pi * b/self.nbands)
+
                 banddft = np.fft.fftshift(np.fft.fft2(coeff[0][b]))
                 orientdft = orientdft + \
                     np.power(np.complex(0, 1), order) * banddft * anglemask * himask
@@ -210,33 +251,13 @@ class SCFpyr(object):
             nlog_rad = log_rad[lostart[0]:loend[0], lostart[1]:loend[1]]
             nangle = angle[lostart[0]:loend[0], lostart[1]:loend[1]]
             YIrcos = np.sqrt(np.abs(1 - Yrcos * Yrcos))
-            lomask = steerable.utils.pointOp(nlog_rad, YIrcos, Xrcos)
+            lomask = pointOp(nlog_rad, YIrcos, Xrcos)
 
-            nresdft = self.reconSCFpyrLevs(coeff[1:], nlog_rad, Xrcos, Yrcos, nangle)
+            nresdft = self._reconstruct_levels(coeff[1:], nlog_rad, Xrcos, Yrcos, nangle)
             resdft = np.zeros(dims, 'complex')
             resdft[lostart[0]:loend[0], lostart[1]:loend[1]] = nresdft * lomask
 
             return resdft + orientdft
 
 
-    def reconSCFpyr(self, coeff):
-
-        if self.nbands != len(coeff[1]):
-            raise Exception("Unmatched number of orientations")
-
-        M, N = coeff[0].shape
-        log_rad, angle = steerable.utils.prepare_grid(M, N)
-
-        Xrcos, Yrcos = steerable.utils.rcosFn(1, -0.5)
-        Yrcos = np.sqrt(Yrcos)
-        YIrcos = np.sqrt(np.abs(1 - Yrcos*Yrcos))
-
-        lo0mask = steerable.utils.pointOp(log_rad, YIrcos, Xrcos)
-        hi0mask = steerable.utils.pointOp(log_rad, Yrcos, Xrcos)
-
-        tempdft = self.reconSCFpyrLevs(coeff[1:], log_rad, Xrcos, Yrcos, angle)
-
-        hidft = np.fft.fftshift(np.fft.fft2(coeff[0]))
-        outdft = tempdft * lo0mask + hidft * hi0mask
-
-        return np.fft.ifft2(np.fft.ifftshift(outdft)).real.astype(int)
+    

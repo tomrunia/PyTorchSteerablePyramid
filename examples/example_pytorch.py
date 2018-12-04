@@ -30,14 +30,14 @@ if __name__ == "__main__":
     im = cv2.resize(im, dsize=(200, 200))
 
     # Build the complex steerable pyramid
-    pyr = SCFpyr(height=5)
+    pyr = SCFpyr(height=5, verbose=True)
     coeff = pyr.build(im)
 
     # Visualization of whole decomposition
     cv2.imshow('coeff', visualize(coeff))
 
     # reconstruction
-    out = pyr.reconSCFpyr(coeff)
+    out = pyr.reconstruct(coeff)
 
     cv2.imshow('sub', coeff[1][0].real)
     cv2.imshow('image', im)

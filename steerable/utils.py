@@ -38,11 +38,8 @@ def prepare_grid(m, n):
 
 def rcosFn(width, position):
     '''
-    https://github.com/LabForComputationalVision/pyPyrTools/blob/master/pyPyrTools/rcosFn.py
     Return a lookup table (suitable for use by INTERP1)
-    containing a "raised cosine" soft threshold function:
-
-    Y = VALUES(1) + (VALUES(2)-VALUES(1)) * cos^2( PI/2 * (X - POSITION + WIDTH)/WIDTH )
+    containing a "raised cosine" soft threshold function
     '''
     N = 256  # abritrary
     X = np.pi * np.array(range(-N-1, 2))/2/N
