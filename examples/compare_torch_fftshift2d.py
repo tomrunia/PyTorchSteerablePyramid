@@ -52,8 +52,12 @@ im_torch = im_torch.to(device)
 fft_torch = torch.rfft(im_torch, signal_ndim=2, onesided=False)
 fft_torch = fftshift(fft_torch[:,:,:,0], fft_torch[:,:,:,1])
 fft_torch = fft_torch.cpu().numpy().squeeze()
-fft_torch = fft_torch[:,:,0] + 1j*fft_torch[:,:,1]
+print(fft_torch.shape)
+fft_torch = np.split(fft_torch, 2, -1)  # complex => real/imag
+fft_torch = np.squeeze(fft_torch, -1)
+fft_torch = fft_torch[0] + 1j*fft_torch[1]
 
+print('fft_torch', fft_torch.shape, fft_torch.dtype)
 fft_torch_mag_viz = np.log10(np.abs(fft_torch))
 fft_torch_ang_viz = np.angle(fft_torch)
 

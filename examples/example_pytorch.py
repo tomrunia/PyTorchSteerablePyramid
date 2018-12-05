@@ -16,31 +16,33 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import numpy as np
+import torch
 
-from steerable.SCFpyr import SCFpyr
-from common.utils import visualize
+from steerable.SCFpyr_PyTorch import SCFpyr_PyTorch
 
+import cortex.vision
 import cv2
 
 
 if __name__ == "__main__":
-
-    image_file = './assets/lena.jpg'
+    
+    device = torch.device('cuda:0')
+    batch_size = 16
+    
+    # Create a batch of images
+    image_file = '/home/tomrunia/data/lena.jpg'
     im = cv2.imread(image_file, cv2.IMREAD_GRAYSCALE)
-    im = cv2.resize(im, dsize=(200, 200))
+    im = cortex.vision.resize(im, out_height=200, out_width=200)
+    im = im.astype(np.float32)/255.
+    im_batch = np.tile(im, (batch_size,1,1))
+
+    # Move to Torch on the GPU
+    im_batch = torch.from_numpy(im_batch)
+    im_batch = im_batch.to(device)
 
     # Build the complex steerable pyramid
-    pyr = SCFpyr(height=5, verbose=True)
-    coeff = pyr.build(im)
-
-    # Visualization of whole decomposition
-    cv2.imshow('coeff', visualize(coeff))
-
-    # reconstruction
-    out = pyr.reconstruct(coeff)
-
-    cv2.imshow('sub', coeff[1][0].real)
-    cv2.imshow('image', im)
-    cv2.imshow('reconstruction', out*255)
-    cv2.waitKey(0)
+    pyr = SCFpyr_PyTorch(height=5, scale_factor=2, device=device)
+    coeff = pyr.build(im_batch)
+    
     

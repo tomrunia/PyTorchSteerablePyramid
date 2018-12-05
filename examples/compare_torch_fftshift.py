@@ -46,7 +46,7 @@ y_torch = y_torch.to(device)
 
 # fft = complex-to-complex, rfft = real-to-complex
 y_fft_torch = torch.rfft(y_torch, signal_ndim=1, onesided=False)
-y_fft_torch = fftshift(y_fft_torch[:, :, 0], y_fft_torch[:, :, 1])
+y_fft_torch = fftshift(y_fft_torch[:,:,0], y_fft_torch[:,:,1])
 y_fft_torch = y_fft_torch.cpu().numpy().squeeze()
 fft_torch_real = y_fft_torch[:,0]
 fft_torch_imag = y_fft_torch[:,1]

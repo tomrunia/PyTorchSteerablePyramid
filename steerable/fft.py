@@ -33,10 +33,10 @@ def fftshift(real, imag):
     for dim in range(1, len(real.size())):
         real = roll_n(real, axis=dim, n=real.size(dim)//2)
         imag = roll_n(imag, axis=dim, n=imag.size(dim)//2)
-    return torch.stack((real, imag), -1)
+    return torch.stack((real, imag), -1)  # last dim=2 (real/imag)
 
 def ifftshift(real, imag):
     for dim in range(len(real.size()) - 1, 0, -1):
         real = roll_n(real, axis=dim, n=real.size(dim)//2)
         imag = roll_n(imag, axis=dim, n=imag.size(dim)//2)
-    return torch.stack((real, imag), -1)
+    return torch.stack((real, imag), -1)  # last dim=2 (real/imag)
