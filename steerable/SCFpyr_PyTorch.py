@@ -98,8 +98,8 @@ class SCFpyr_PyTorch(object):
 
         # TODO: cache? Make more efficient (also: unreadable one-liner)
         # Note that we expand dims to support broadcasting later
-        lo0mask = torch.from_numpy(lo0mask)[None,None,:,:].float().to(self.device)
-        hi0mask = torch.from_numpy(hi0mask)[None,None,:,:].float().to(self.device)
+        lo0mask = torch.from_numpy(lo0mask)[None,:,:,None].float().to(self.device)
+        hi0mask = torch.from_numpy(hi0mask)[None,:,:,None].float().to(self.device)
 
         # Fourier transform (2D) and shifting
         batch_dft = torch.rfft(im_batch, signal_ndim=2, onesided=False)
@@ -109,14 +109,23 @@ class SCFpyr_PyTorch(object):
         # Low-pass
         lo0dft = batch_dft * lo0mask
         
+        # Start recursively building the pyramids
         coeff = self._build_levels(lo0dft, log_rad, angle, Xrcos, Yrcos, self.height-1)
 
         # High-pass
         hi0dft = batch_dft * hi0mask
-        hi0 = np.fft.ifft2(np.fft.ifftshift(hi0dft))
+
+        hi0 = torch.ifft(hi0dft, signal_ndim=2)
+        hi0 = torch.unbind(hi0, -1)  # split into real/imag
+        hi0 = fft_utils.ifftshift(hi0[0], hi0[1])
+        hi0_real = torch.unbind(hi0, -1)[0]
 
         # Note: high-pass is inserted in the beginning
-        coeff.insert(0, hi0.real)
+        coeff.insert(0, hi0_real)
+        print('#'*60)
+        print('HIGH-PASS')
+        print('  high-pass band, shape: {}'.format(hi0_real.shape))
+        print('#'*60)
 
         return coeff
 
@@ -129,23 +138,30 @@ class SCFpyr_PyTorch(object):
         This is called by buildSCFpyr, and is not usually called directly.
         '''
 
+        print('#'*60)
+
         if height <= 1:
 
             # Low-pass
+            print('LOW-PASS')
             lo0 = torch.rfft(lodft, signal_ndim=2, onesided=False)
-            lo0 = fft_utils.fftshift(lo0[0,], lo0[1,])
-            coeff = [lo0[0]]  #  only real part
+            lo0 = torch.unbind(lo0, -1)     # split into real/imag
+            lo0 = fft_utils.fftshift(lo0[0], lo0[1])
+            lo0 = torch.unbind(lo0, -1)[0]  # take real part
+            coeff = [lo0]
+            print('  low-pass band, shape: {}'.format(lo0.shape))
 
         else:
-
-            Xrcos = Xrcos - np.log2(self.scale_factor)
+            
+            print('LEVEL {}'.format(height))
+            Xrcos = Xrcos - 1 # np.log2(self.scale_factor)
 
             ####################################################################
             ####################### Orientation bandpass #######################
             ####################################################################
 
             himask = pointOp(log_rad, Yrcos, Xrcos)
-            himask = torch.from_numpy(himask).float().to(self.device)
+            himask = torch.from_numpy(himask[None,:,:,None]).float().to(self.device)
 
             order = self.nbands - 1
             const = np.power(2, 2*order) * np.square(factorial(order)) / (self.nbands * factorial(2*order))
@@ -154,7 +170,7 @@ class SCFpyr_PyTorch(object):
             # Constant and complex multiplication factor
             complex_factor = np.power(np.complex(0, -1), self.nbands - 1)
             complex_factor = torch.tensor((np.real(complex_factor), np.imag(complex_factor)), dtype=torch.float32)
-            complex_factor = complex_factor[:,None,None,None]  # for broadcasting
+            complex_factor = complex_factor[None,None,None,:]  # for broadcasting
             complex_factor = complex_factor.to(self.device)
 
             # Loop through all orientation bands
@@ -162,46 +178,54 @@ class SCFpyr_PyTorch(object):
             for b in range(self.nbands):
 
                 anglemask = pointOp(angle, Ycosn, self.Xcosn + np.pi*b/self.nbands)
-                anglemask = anglemask[None,None,:,:]  # for broadcasting
+                anglemask = anglemask[None,:,:,None]  # for broadcasting
                 anglemask = torch.from_numpy(anglemask).float().to(self.device)
 
-                print('complex_factor', complex_factor.shape, complex_factor.dtype)
-                print('anglemask', anglemask.shape, anglemask.dtype)
-                print('lodft', lodft.shape, lodft.dtype)
-                print('himask', himask.shape, himask.dtype)
+                # print('  complex_factor', complex_factor.shape, complex_factor.dtype)
+                # print('  anglemask', anglemask.shape, anglemask.dtype)
+                # print('  lodft', lodft.shape, lodft.dtype)
+                # print('  himask', himask.shape, himask.dtype)
 
                 # Bandpass filtering
                 banddft = complex_factor * lodft * anglemask * himask
 
                 # Inverse Fourier transform (complex-to-complex)
                 band = torch.ifft(banddft, signal_ndim=2)
+                band = torch.unbind(band, -1)  # split into real/imag
+                band = fft_utils.ifftshift(band[0], band[1])
 
-                print('banddft', banddft.shape, banddft.dtype)
-                print('band', band.shape, band.dtype)
-
-
-                #band = np.fft.ifft2(np.fft.ifftshift(banddft))
                 orientations.append(band)
+                print('Orientation: {}, shape: {}'.format(b, band.shape))
 
             ####################################################################
             ######################## Subsample lowpass #########################
             ####################################################################
 
-            dims = np.array(lodft.shape)
+            # Don't consider batch_size and imag/real dim
+            dims = np.array(lodft.shape[1:3])  
 
             # Both are tuples of size 2
             low_ind_start = (np.ceil((dims+0.5)/2) - np.ceil((np.ceil((dims-0.5)/2)+0.5)/2)).astype(int)
             low_ind_end   = (low_ind_start + np.ceil((dims-0.5)/2)).astype(int)
           
-            # Selection
-            log_rad = log_rad[low_ind_start[0]:low_ind_end[0], low_ind_start[1]:low_ind_end[1]]
-            angle   = angle[low_ind_start[0]:low_ind_end[0], low_ind_start[1]:low_ind_end[1]]
-            lodft   = lodft[low_ind_start[0]:low_ind_end[0], low_ind_start[1]:low_ind_end[1]]
+            # Subsampling indices
+            log_rad = log_rad[low_ind_start[0]:low_ind_end[0],low_ind_start[1]:low_ind_end[1]]
+            angle = angle[low_ind_start[0]:low_ind_end[0],low_ind_start[1]:low_ind_end[1]]
 
-            # Subsampling in frequency domain
+            # Actual subsampling
+            lodft = lodft[:,low_ind_start[0]:low_ind_end[0],low_ind_start[1]:low_ind_end[1],:]
+
+            # Filtering
             YIrcos = np.abs(np.sqrt(1 - Yrcos**2))
             lomask = pointOp(log_rad, YIrcos, Xrcos)
+            lomask = torch.from_numpy(lomask[None,:,:,None]).float()
+            lomask = lomask.to(self.device)
+
+            # Convolution in spatial domain
             lodft = lomask * lodft
+
+            print('Lowpass:')
+            print('  lodft', lodft.shape, lodft.dtype)
 
             ####################################################################
             ####################### Recursion next level #######################

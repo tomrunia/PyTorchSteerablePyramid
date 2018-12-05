@@ -20,10 +20,13 @@ import numpy as np
 import torch
 
 from steerable.SCFpyr_PyTorch import SCFpyr_PyTorch
+from steerable.visualize import visualize
 
 import cortex.vision
 import cv2
 
+################################################################################
+################################################################################
 
 if __name__ == "__main__":
     
@@ -43,6 +46,19 @@ if __name__ == "__main__":
 
     # Build the complex steerable pyramid
     pyr = SCFpyr_PyTorch(height=5, scale_factor=2, device=device)
-    coeff = pyr.build(im_batch)
-    
-    
+    coeff_batch = pyr.build(im_batch)
+
+    # HighPass:         coeff[0] : highpass
+    # BandPass Scale 1: coeff[1][0], coeff[1][1], coeff[1][2], coeff[1][3]
+    # BandPass Scale 2: coeff[2][0], coeff[2][1], coeff[2][2], coeff[2][3]
+
+    filter_viz = visualize(coeff_batch, example_idx=0)
+    cv2.imshow('filter visualization', filter_viz)
+    cv2.waitKey(0)
+
+
+
+
+
+
+

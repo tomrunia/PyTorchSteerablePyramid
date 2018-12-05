@@ -20,41 +20,6 @@ import numpy as np
 
 ################################################################################
 
-def visualize(coeff, normalize=True):
-    # For visualization of all pyramid levels and orientations
-    M, N = coeff[1][0].shape
-    Norients = len(coeff[1])
-    out = np.zeros((M * 2 - coeff[-1].shape[0], Norients * N))
-
-    currentx = 0
-    currenty = 0
-    for i in range(1, len(coeff[:-1])):
-        for j in range(len(coeff[1])):
-            tmp = coeff[i][j].real
-            m, n = tmp.shape
-
-            if normalize:
-                tmp = 255 * tmp/tmp.max()
-
-            tmp[m - 1, :] = 255
-            tmp[:, n - 1] = 2555
-
-            out[currentx: currentx + m, currenty: currenty + n] = tmp
-            currenty += n
-        currentx += coeff[i][0].shape[0]
-        currenty = 0
-
-    m, n = coeff[-1].shape
-    out[currentx: currentx+m, currenty: currenty+n] = 255 * coeff[-1]/coeff[-1].max()
-
-    out[0, :] = 255
-    out[:, 0] = 255
-
-    return out
-
-################################################################################
-################################################################################
-
 def prepare_grid(m, n):
     x = np.linspace(-(m // 2)/(m / 2), (m // 2)/(m / 2) - (1 - m % 2)*2/m, num=m)
     y = np.linspace(-(n // 2)/(n / 2), (n // 2)/(n / 2) - (1 - n % 2)*2/n, num=n)
