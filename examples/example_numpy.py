@@ -16,32 +16,32 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-
-from steerable.SCFpyr import SCFpyr
-from steerable.utils import visualize
-
-import cortex.vision
+import numpy as np
 import cv2
 
+from steerable.SCFpyr import SCFpyr
+from steerable.visualize import visualize
+import cortex.vision
 
-if __name__ == "__main__":
-    
-    image_file = '/home/tomrunia/data/lena.jpg'
-    im = cv2.imread(image_file, cv2.IMREAD_GRAYSCALE)
-    im = cortex.vision.resize(im, out_height=200, out_width=200)
+################################################################################
 
-    # Build the complex steerable pyramid
-    pyr = SCFpyr(height=5)
-    coeff = pyr.build(im)
-    
-    # Visualization of whole decomposition
-    cv2.imshow('coeff', visualize(coeff))
+image_file = './assets/lena.jpg'
+im = cv2.imread(image_file, cv2.IMREAD_GRAYSCALE)
+im = cortex.vision.resize(im, out_height=200, out_width=200)
+im = im.astype(np.float64)/255.
 
-    # reconstruction
-    out = pyr.reconstruct(coeff)
+# Build the complex steerable pyramid
+pyr = SCFpyr(height=5)
+coeff = pyr.build(im)
 
-    cv2.imshow('sub', coeff[1][0].real)
-    cv2.imshow('image', im)
-    cv2.imshow('reconstruction', out*255)
-    cv2.waitKey(0)
-    
+# Visualization of whole decomposition
+cv2.imshow('coeff', visualize(coeff))
+
+# reconstruction
+out = pyr.reconstruct(coeff)
+
+cv2.imshow('sub', coeff[1][0].real)
+cv2.imshow('image', im)
+cv2.imshow('reconstruction', out*255)
+cv2.waitKey(0)
+

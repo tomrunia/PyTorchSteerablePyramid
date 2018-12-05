@@ -46,10 +46,15 @@ class SCFpyr(object):
 
     '''
 
-    def __init__(self, height=5, nbands=4, verbose=False):
+    def __init__(self, height=5, nbands=4):
         self.nbands  = nbands  # number of orientation bands
         self.height  = height  # including low-pass and high-pass
-        self.verbose = verbose
+        
+        # Cache constants
+        self.lutsize = 1024
+        self.Xcosn = np.pi * np.array(range(-(2*self.lutsize+1), (self.lutsize+2)))/self.lutsize
+        self.alpha = (self.Xcosn + np.pi) % (2*np.pi) - np.pi
+
 
     ################################################################################
     # Construction of Steerable Pyramid
@@ -88,14 +93,25 @@ class SCFpyr(object):
         # Corresponds to the TensorFlow's fftshift function
         imdft = np.fft.fftshift(np.fft.fft2(im))
 
+        print('imdft (real)', imdft.real.min(), imdft.real.max(), imdft.real.mean())
+        print('imdft (real)', imdft.imag.min(), imdft.imag.max(), imdft.imag.mean())
+
         # Low-pass
         lo0dft = imdft * lo0mask
+
+        print('lo0dft (real)', lo0dft.real.min(), lo0dft.real.max(), lo0dft.real.mean())
+        print('lo0dft (imag)', lo0dft.imag.min(), lo0dft.imag.max(), lo0dft.imag.mean())
 
         coeff = self._build_levels(lo0dft, log_rad, angle, Xrcos, Yrcos, self.height-1)
 
         # High-pass
         hi0dft = imdft * hi0mask
         hi0 = np.fft.ifft2(np.fft.ifftshift(hi0dft))
+
+        print('#'*60)
+        print('HIGH-PASS')
+        print('  high-pass band, shape: {}'.format(hi0.real.shape))
+        print('#'*60)
 
         # Note: high-pass is inserted in the beginning
         coeff.insert(0, hi0.real)
@@ -109,21 +125,23 @@ class SCFpyr(object):
         This is called by buildSCFpyr, and is not usually called directly.
         '''
 
-        if self.verbose:
-            print('#'*60)
-            print('PyrLevel {}'.format(height))
-            print('  Xrcos, min = {:.3f}, max = {:.3f}, shape = {}'.format(Xrcos.min(), Xrcos.max(), Xrcos.shape))
-            print('  Yrcos, min = {:.3f}, max = {:.3f}, shape = {}'.format(Yrcos.min(), Yrcos.max(), Yrcos.shape))
+        print('#'*60)
 
         if height <= 1:
 
             # Low-pass
+            print('LOW-PASS')
             lo0 = np.fft.ifft2(np.fft.ifftshift(lodft))
             coeff = [lo0.real]
+            print('  low-pass band, shape: {}, type: {}'.format(lo0.real.shape, lo0.real.dtype))
 
         else:
-
+            
+            print('LEVEL {}'.format(height))
             Xrcos = Xrcos - 1
+
+            print('Xrcos', Xrcos.min(), Xrcos.max(), Xrcos.mean())
+            
 
             ####################################################################
             ####################### Orientation bandpass #######################
@@ -131,21 +149,30 @@ class SCFpyr(object):
 
             himask = pointOp(log_rad, Yrcos, Xrcos)
 
-            lutsize = 1024
-            Xcosn = np.pi * np.array(range(-(2*lutsize+1), (lutsize+2)))/lutsize
             order = self.nbands - 1
             const = np.power(2, 2*order) * np.square(factorial(order)) / (self.nbands * factorial(2*order))
+            Ycosn = 2*np.sqrt(const) * np.power(np.cos(self.Xcosn), order) * (np.abs(self.alpha) < np.pi/2)
 
-            alpha = (Xcosn + np.pi) % (2*np.pi) - np.pi
-            Ycosn = 2*np.sqrt(const) * np.power(np.cos(Xcosn), order) * (np.abs(alpha) < np.pi/2)
+            print('Ycosn', Ycosn.shape, Ycosn.dtype, Ycosn.min(), Ycosn.max(), Ycosn.mean())
 
             # Loop through all orientation bands
             orientations = []
             for b in range(self.nbands):
-                anglemask = pointOp(angle, Ycosn, Xcosn + np.pi*b/self.nbands)
+                anglemask = pointOp(angle, Ycosn, self.Xcosn + np.pi*b/self.nbands)
+                #print('anglemask, orientation:', b, anglemask.shape, anglemask.dtype, anglemask.min(), anglemask.max(), anglemask.mean(), anglemask.sum())
+
                 banddft = np.power(np.complex(0, -1), self.nbands - 1) * lodft * anglemask * himask
+
                 band = np.fft.ifft2(np.fft.ifftshift(banddft))
                 orientations.append(band)
+
+                print("#"*40)
+                print('banddft orientation:', b, 'real', band.real.min(), band.real.max(), band.real.mean(), band.real.sum())
+                print('banddft orientation:', b, 'imag', band.imag.min(), band.imag.max(), band.imag.mean(), band.imag.sum())
+                #print('Orientation: {}, shape: {}, dtype: {}, min: {:.3f}, max = {:.3f}'.format(b, band.shape, band.dtype, band.min(), band.max()))
+
+            exit()
+            
 
             ####################################################################
             ######################## Subsample lowpass #########################
@@ -162,14 +189,13 @@ class SCFpyr(object):
             angle   = angle[low_ind_start[0]:low_ind_end[0], low_ind_start[1]:low_ind_end[1]]
             lodft   = lodft[low_ind_start[0]:low_ind_end[0], low_ind_start[1]:low_ind_end[1]]
 
-            if self.verbose:
-                print('  low_log_rad, min = {:.3f}, max = {:.3f}, shape = {}'.format(log_rad.min(), log_rad.max(), log_rad.shape))
-                print('  low_angle,   min = {:.3f}, max = {:.3f}, shape = {}'.format(angle.min(), angle.max(), angle.shape))
-
             # Subsampling in frequency domain
             YIrcos = np.abs(np.sqrt(1 - Yrcos**2))
             lomask = pointOp(log_rad, YIrcos, Xrcos)
             lodft = lomask * lodft
+
+            print('Lowpass:')
+            print('  lodft', lodft.shape, lodft.dtype)
 
             ####################################################################
             ####################### Recursion next level #######################

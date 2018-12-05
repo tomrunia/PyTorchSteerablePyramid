@@ -61,6 +61,7 @@ class SCFpyr_PyTorch(object):
         self.lutsize = 1024
         self.Xcosn = np.pi * np.array(range(-(2*self.lutsize+1), (self.lutsize+2)))/self.lutsize
         self.alpha = (self.Xcosn + np.pi) % (2*np.pi) - np.pi
+        self.complex_factor = np.power(np.complex(0, -1), self.nbands - 1)
         
     ################################################################################
     # Construction of Steerable Pyramid
@@ -75,8 +76,9 @@ class SCFpyr_PyTorch(object):
           ...
           LowPass: coeff[4]
         '''
+        print('!!! WARNING: change to torch.float32 !!!')
 
-        assert im_batch.dtype == torch.float32, 'Image batch must be torch.float32'
+        assert im_batch.dtype == torch.float64, 'Image batch must be torch.float32'
         assert len(im_batch.shape) == 3, 'Images batch must be grayscale'
         _, height, width = im_batch.shape
 
@@ -96,19 +98,30 @@ class SCFpyr_PyTorch(object):
         lo0mask = pointOp(log_rad, YIrcos, Xrcos)
         hi0mask = pointOp(log_rad, Yrcos, Xrcos)
 
-        # TODO: cache? Make more efficient (also: unreadable one-liner)
+        # TODO: cache? Make more efficient (also: ugly one-liner)
         # Note that we expand dims to support broadcasting later
-        lo0mask = torch.from_numpy(lo0mask)[None,:,:,None].float().to(self.device)
-        hi0mask = torch.from_numpy(hi0mask)[None,:,:,None].float().to(self.device)
+        lo0mask = torch.from_numpy(lo0mask)[None,:,:,None].to(self.device)
+        hi0mask = torch.from_numpy(hi0mask)[None,:,:,None].to(self.device)
 
         # Fourier transform (2D) and shifting
         batch_dft = torch.rfft(im_batch, signal_ndim=2, onesided=False)
+        print('batch_dft before fftshift', batch_dft.shape)
+        
         batch_dft = torch.unbind(batch_dft, -1)  # complex to real/imag
+
+        # CHECKED: this is the same as NumPy implementation
+        print(batch_dft[0].shape, batch_dft[1].shape)
+        print('batch_dft before fftshift (real)', batch_dft[0].min().item(), batch_dft[0].max().item(), batch_dft[0].mean().item())
+        print('batch_dft before fftshift (imag)', batch_dft[1].min().item(), batch_dft[1].max().item(), batch_dft[1].mean().item())
         batch_dft = fft_utils.fftshift(batch_dft[0], batch_dft[1])
 
         # Low-pass
         lo0dft = batch_dft * lo0mask
-        
+
+        # CHECKED: same as NumPy implementation
+        print('lo0dft (real)', lo0dft[:,:,:,0].min().item(), lo0dft[:,:,:,0].max().item(), lo0dft[:,:,:,0].mean().item())
+        print('lo0dft (imag)', lo0dft[:,:,:,1].min().item(), lo0dft[:,:,:,1].max().item(), lo0dft[:,:,:,1].mean().item())
+
         # Start recursively building the pyramids
         coeff = self._build_levels(lo0dft, log_rad, angle, Xrcos, Yrcos, self.height-1)
 
@@ -133,7 +146,6 @@ class SCFpyr_PyTorch(object):
     def _build_levels(self, lodft, log_rad, angle, Xrcos, Yrcos, height):
         '''
         NOTE: lodft is now a Torch tensor possibly living on the GPU
-
         Recursive function for constructing levels of a complex steerable pyramid. 
         This is called by buildSCFpyr, and is not usually called directly.
         '''
@@ -147,31 +159,31 @@ class SCFpyr_PyTorch(object):
             lo0 = torch.rfft(lodft, signal_ndim=2, onesided=False)
             lo0 = torch.unbind(lo0, -1)     # split into real/imag
             lo0 = fft_utils.fftshift(lo0[0], lo0[1])
-            lo0 = torch.unbind(lo0, -1)[0]  # take real part
-            coeff = [lo0]
-            print('  low-pass band, shape: {}'.format(lo0.shape))
+            lo0_real = torch.unbind(lo0, -1)[0]
+            coeff = [lo0_real]
+            print('  low-pass band, shape: {}'.format(lo0_real.shape))
 
         else:
             
             print('LEVEL {}'.format(height))
-            Xrcos = Xrcos - 1 # np.log2(self.scale_factor)
+            Xrcos = Xrcos - np.log2(self.scale_factor)
+
+            # CHECKED: same as NumPy
+            print('Xrcos', Xrcos.min(), Xrcos.max(), Xrcos.mean())
 
             ####################################################################
             ####################### Orientation bandpass #######################
             ####################################################################
 
             himask = pointOp(log_rad, Yrcos, Xrcos)
-            himask = torch.from_numpy(himask[None,:,:,None]).float().to(self.device)
+            himask = torch.from_numpy(himask[None,:,:,None]).to(self.device)
 
             order = self.nbands - 1
             const = np.power(2, 2*order) * np.square(factorial(order)) / (self.nbands * factorial(2*order))
             Ycosn = 2*np.sqrt(const) * np.power(np.cos(self.Xcosn), order) * (np.abs(self.alpha) < np.pi/2) # [n,]
 
-            # Constant and complex multiplication factor
-            complex_factor = np.power(np.complex(0, -1), self.nbands - 1)
-            complex_factor = torch.tensor((np.real(complex_factor), np.imag(complex_factor)), dtype=torch.float32)
-            complex_factor = complex_factor[None,None,None,:]  # for broadcasting
-            complex_factor = complex_factor.to(self.device)
+            # CHECKED: same as NumPy
+            print('Ycosn', Ycosn.shape, Ycosn.dtype, Ycosn.min(), Ycosn.max(), Ycosn.mean())
 
             # Loop through all orientation bands
             orientations = []
@@ -179,7 +191,10 @@ class SCFpyr_PyTorch(object):
 
                 anglemask = pointOp(angle, Ycosn, self.Xcosn + np.pi*b/self.nbands)
                 anglemask = anglemask[None,:,:,None]  # for broadcasting
-                anglemask = torch.from_numpy(anglemask).float().to(self.device)
+                anglemask = torch.from_numpy(anglemask).to(self.device)
+
+                # CHECKED: same as NumPy
+                #print('anglemask, orientation:', b, anglemask.shape, anglemask.dtype, anglemask.min(), anglemask.max(), anglemask.mean(), anglemask.sum())
 
                 # print('  complex_factor', complex_factor.shape, complex_factor.dtype)
                 # print('  anglemask', anglemask.shape, anglemask.dtype)
@@ -187,15 +202,29 @@ class SCFpyr_PyTorch(object):
                 # print('  himask', himask.shape, himask.dtype)
 
                 # Bandpass filtering
-                banddft = complex_factor * lodft * anglemask * himask
+                
+                banddft = lodft * anglemask * himask
+
+                # Now multiply with complex number
+                # (x+yi)(u+vi) = (xu-yv) + (xv+yu)i
+                banddft = torch.unbind(banddft, -1)
+                banddft_real = self.complex_factor.real*banddft[0] - self.complex_factor.imag*banddft[1]
+                banddft_imag = self.complex_factor.real*banddft[1] + self.complex_factor.imag*banddft[0]
+                banddft = torch.stack((banddft_real, banddft_imag), -1)
 
                 # Inverse Fourier transform (complex-to-complex)
                 band = torch.ifft(banddft, signal_ndim=2)
                 band = torch.unbind(band, -1)  # split into real/imag
                 band = fft_utils.ifftshift(band[0], band[1])
+                
+                # THERE SEEM TO BE SIGNIFICANT NUMERICAL DIFFERENCES HERE ...
+                real, imag = torch.unbind(band, -1)
+                print("#"*40)
+                print('band orientation:', b, 'real', real.min().float().item(), real.max().float().item(), real.mean().float().item(), real.sum().float().item())
+                print('band orientation:', b, 'imag', imag.min().float().item(), imag.max().float().item(), imag.mean().float().item(), imag.sum().float().item())
 
                 orientations.append(band)
-                print('Orientation: {}, shape: {}'.format(b, band.shape))
+                #print('Orientation: {}, shape: {}, min: {:.3f}, max = {:.3f}'.format(b, band.shape, band.min(), band.max()))
 
             ####################################################################
             ######################## Subsample lowpass #########################
@@ -218,7 +247,7 @@ class SCFpyr_PyTorch(object):
             # Filtering
             YIrcos = np.abs(np.sqrt(1 - Yrcos**2))
             lomask = pointOp(log_rad, YIrcos, Xrcos)
-            lomask = torch.from_numpy(lomask[None,:,:,None]).float()
+            lomask = torch.from_numpy(lomask[None,:,:,None])
             lomask = lomask.to(self.device)
 
             # Convolution in spatial domain
