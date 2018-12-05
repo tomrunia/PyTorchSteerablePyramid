@@ -29,7 +29,7 @@ class SCFpyr(object):
     '''
     This is a modified version of buildSFpyr, that constructs a
     complex-valued steerable pyramid  using Hilbert-transform pairs
-    of filters.  Note that the imaginary parts will *not* be steerable.
+    of filters. Note that the imaginary parts will *not* be steerable.
 
     Description of this transform appears in: Portilla & Simoncelli,
     International Journal of Computer Vision, 40(1):49-71, Oct 2000.
@@ -70,7 +70,7 @@ class SCFpyr(object):
 
         # Check whether im shape allows the pyramid M
         max_height_pyr = int(np.floor(np.log2(min(width, height))) - 2)
-        assert max_height_pyr >= self.height, "Cannot buid pyramid heigher than {} levels".format(max_height_pyr)
+        assert max_height_pyr >= self.height, 'Cannot buid pyramid heigher than {} levels'.format(max_height_pyr)
         
         # Prepare a grid
         log_rad, angle = steerable.utils.prepare_grid(height, width)
