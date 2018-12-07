@@ -93,14 +93,8 @@ class SCFpyr(object):
         # Corresponds to the TensorFlow's fftshift function
         imdft = np.fft.fftshift(np.fft.fft2(im))
 
-        print('imdft (real)', imdft.real.min(), imdft.real.max(), imdft.real.mean())
-        print('imdft (real)', imdft.imag.min(), imdft.imag.max(), imdft.imag.mean())
-
         # Low-pass
         lo0dft = imdft * lo0mask
-
-        print('lo0dft (real)', lo0dft.real.min(), lo0dft.real.max(), lo0dft.real.mean())
-        print('lo0dft (imag)', lo0dft.imag.min(), lo0dft.imag.max(), lo0dft.imag.mean())
 
         coeff = self._build_levels(lo0dft, log_rad, angle, Xrcos, Yrcos, self.height-1)
 
@@ -140,9 +134,6 @@ class SCFpyr(object):
             print('LEVEL {}'.format(height))
             Xrcos = Xrcos - 1
 
-            print('Xrcos', Xrcos.min(), Xrcos.max(), Xrcos.mean())
-            
-
             ####################################################################
             ####################### Orientation bandpass #######################
             ####################################################################
@@ -153,26 +144,13 @@ class SCFpyr(object):
             const = np.power(2, 2*order) * np.square(factorial(order)) / (self.nbands * factorial(2*order))
             Ycosn = 2*np.sqrt(const) * np.power(np.cos(self.Xcosn), order) * (np.abs(self.alpha) < np.pi/2)
 
-            print('Ycosn', Ycosn.shape, Ycosn.dtype, Ycosn.min(), Ycosn.max(), Ycosn.mean())
-
             # Loop through all orientation bands
             orientations = []
             for b in range(self.nbands):
                 anglemask = pointOp(angle, Ycosn, self.Xcosn + np.pi*b/self.nbands)
-                #print('anglemask, orientation:', b, anglemask.shape, anglemask.dtype, anglemask.min(), anglemask.max(), anglemask.mean(), anglemask.sum())
-
                 banddft = np.power(np.complex(0, -1), self.nbands - 1) * lodft * anglemask * himask
-
                 band = np.fft.ifft2(np.fft.ifftshift(banddft))
                 orientations.append(band)
-
-                print("#"*40)
-                print('banddft orientation:', b, 'real', band.real.min(), band.real.max(), band.real.mean(), band.real.sum())
-                print('banddft orientation:', b, 'imag', band.imag.min(), band.imag.max(), band.imag.mean(), band.imag.sum())
-                #print('Orientation: {}, shape: {}, dtype: {}, min: {:.3f}, max = {:.3f}'.format(b, band.shape, band.dtype, band.min(), band.max()))
-
-            exit()
-            
 
             ####################################################################
             ######################## Subsample lowpass #########################

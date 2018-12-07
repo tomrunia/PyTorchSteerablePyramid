@@ -30,7 +30,7 @@ import cv2
 ################################################################################
 # Common
 
-image_file = '/home/tomrunia/data/lena.jpg'
+image_file = './assets/lena.jpg'
 im = cv2.imread(image_file, cv2.IMREAD_GRAYSCALE)
 im = cortex.vision.resize(im, out_height=200, out_width=200)
 im = im.astype(np.float32)/255.
@@ -49,7 +49,7 @@ coeff_numpy = pyr.build(im)
 ################################################################################
 # PyTorch
 
-device = torch.device('cuda:0')
+device = torch.device('cpu')
 batch_size = 16
 
 # Create a batch of images
