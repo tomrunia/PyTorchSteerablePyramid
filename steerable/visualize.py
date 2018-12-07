@@ -37,13 +37,7 @@ def visualize_torch_from_batch(coeff, example_idx=0, normalize=True):
     # For visualization of all pyramid levels and orientations
     _, M, N, _ = coeff[1][0].shape
     Norients = len(coeff[1])
-
-    print('M,N', M,N)
-    print('orientations: {}'.format(Norients))
-    print('coeff[-1].shape[1]', coeff[-1].shape[1])
-    
     out = np.zeros((M * 2 - coeff[-1].shape[0], Norients * N))
-
     currentx, currenty = 0, 0
     
     for i in range(1, len(coeff[:-1])):
@@ -54,7 +48,6 @@ def visualize_torch_from_batch(coeff, example_idx=0, normalize=True):
             tmp = tmp.cpu().numpy()
 
             m, n = tmp.shape
-            print('tmp.shape', tmp.shape)
 
             if normalize:
                 tmp = 255 * tmp/tmp.max()
@@ -69,8 +62,8 @@ def visualize_torch_from_batch(coeff, example_idx=0, normalize=True):
         currenty = 0
 
     # Low-pass
-    _, m, n, _ = coeff[-1].shape
-    tmp = coeff[-1][example_idx,:,:,0]  # select batch and real part
+    _, m, n = coeff[-1].shape
+    tmp = coeff[-1][example_idx,:,:]  # select batch and real part
     tmp = tmp.cpu().numpy()
     out[currentx: currentx+m, currenty: currenty+n] = 255 * tmp/tmp.max()
 
@@ -89,15 +82,10 @@ def visualize_single(coeff, normalize=True):
 
     currentx, currenty = 0, 0
 
-    print('i', 1, len(coeff[:-1]))
-    print('j', 0, len(coeff[1]))
-
     for i in range(1, len(coeff[:-1])):
         for j in range(len(coeff[1])):
             tmp = coeff[i][j].real
             m, n = tmp.shape
-            print('tmp.shape', tmp.shape)
-
             if normalize:
                 tmp = 255 * tmp/tmp.max()
 
@@ -106,7 +94,6 @@ def visualize_single(coeff, normalize=True):
             out[currentx:currentx+m,currenty:currenty+n] = tmp
             currenty += n
         
-        print('offset', coeff[i][0].shape[0])
         currentx += coeff[i][0].shape[0]
         currenty = 0
 

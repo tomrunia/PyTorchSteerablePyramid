@@ -46,10 +46,15 @@ class SCFpyr(object):
 
     '''
 
-    def __init__(self, height=5, nbands=4, verbose=False):
+    def __init__(self, height=5, nbands=4):
         self.nbands  = nbands  # number of orientation bands
         self.height  = height  # including low-pass and high-pass
-        self.verbose = verbose
+        
+        # Cache constants
+        self.lutsize = 1024
+        self.Xcosn = np.pi * np.array(range(-(2*self.lutsize+1), (self.lutsize+2)))/self.lutsize
+        self.alpha = (self.Xcosn + np.pi) % (2*np.pi) - np.pi
+
 
     ################################################################################
     # Construction of Steerable Pyramid
@@ -97,6 +102,11 @@ class SCFpyr(object):
         hi0dft = imdft * hi0mask
         hi0 = np.fft.ifft2(np.fft.ifftshift(hi0dft))
 
+        print('#'*60)
+        print('HIGH-PASS')
+        print('  high-pass band, shape: {}'.format(hi0.real.shape))
+        print('#'*60)
+
         # Note: high-pass is inserted in the beginning
         coeff.insert(0, hi0.real)
 
@@ -109,20 +119,19 @@ class SCFpyr(object):
         This is called by buildSCFpyr, and is not usually called directly.
         '''
 
-        if self.verbose:
-            print('#'*60)
-            print('PyrLevel {}'.format(height))
-            print('  Xrcos, min = {:.3f}, max = {:.3f}, shape = {}'.format(Xrcos.min(), Xrcos.max(), Xrcos.shape))
-            print('  Yrcos, min = {:.3f}, max = {:.3f}, shape = {}'.format(Yrcos.min(), Yrcos.max(), Yrcos.shape))
+        print('#'*60)
 
         if height <= 1:
 
             # Low-pass
+            print('LOW-PASS')
             lo0 = np.fft.ifft2(np.fft.ifftshift(lodft))
             coeff = [lo0.real]
+            print('  low-pass band, shape: {}, type: {}'.format(lo0.real.shape, lo0.real.dtype))
 
         else:
-
+            
+            print('LEVEL {}'.format(height))
             Xrcos = Xrcos - 1
 
             ####################################################################
@@ -131,18 +140,14 @@ class SCFpyr(object):
 
             himask = pointOp(log_rad, Yrcos, Xrcos)
 
-            lutsize = 1024
-            Xcosn = np.pi * np.array(range(-(2*lutsize+1), (lutsize+2)))/lutsize
             order = self.nbands - 1
             const = np.power(2, 2*order) * np.square(factorial(order)) / (self.nbands * factorial(2*order))
-
-            alpha = (Xcosn + np.pi) % (2*np.pi) - np.pi
-            Ycosn = 2*np.sqrt(const) * np.power(np.cos(Xcosn), order) * (np.abs(alpha) < np.pi/2)
+            Ycosn = 2*np.sqrt(const) * np.power(np.cos(self.Xcosn), order) * (np.abs(self.alpha) < np.pi/2)
 
             # Loop through all orientation bands
             orientations = []
             for b in range(self.nbands):
-                anglemask = pointOp(angle, Ycosn, Xcosn + np.pi*b/self.nbands)
+                anglemask = pointOp(angle, Ycosn, self.Xcosn + np.pi*b/self.nbands)
                 banddft = np.power(np.complex(0, -1), self.nbands - 1) * lodft * anglemask * himask
                 band = np.fft.ifft2(np.fft.ifftshift(banddft))
                 orientations.append(band)
@@ -162,14 +167,13 @@ class SCFpyr(object):
             angle   = angle[low_ind_start[0]:low_ind_end[0], low_ind_start[1]:low_ind_end[1]]
             lodft   = lodft[low_ind_start[0]:low_ind_end[0], low_ind_start[1]:low_ind_end[1]]
 
-            if self.verbose:
-                print('  low_log_rad, min = {:.3f}, max = {:.3f}, shape = {}'.format(log_rad.min(), log_rad.max(), log_rad.shape))
-                print('  low_angle,   min = {:.3f}, max = {:.3f}, shape = {}'.format(angle.min(), angle.max(), angle.shape))
-
             # Subsampling in frequency domain
             YIrcos = np.abs(np.sqrt(1 - Yrcos**2))
             lomask = pointOp(log_rad, YIrcos, Xrcos)
             lodft = lomask * lodft
+
+            print('Lowpass:')
+            print('  lodft', lodft.shape, lodft.dtype)
 
             ####################################################################
             ####################### Recursion next level #######################
