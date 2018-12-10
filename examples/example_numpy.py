@@ -16,32 +16,87 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import argparse
 import numpy as np
+import skimage
+import time
 import cv2
 
-from steerable.SCFpyr import SCFpyr
-from steerable.visualize import visualize
-import cortex.vision
+from steerable.SCFpyr_NumPy import SCFpyr_NumPy
+import steerable.utils as utils
 
 ################################################################################
+################################################################################
 
-image_file = './assets/lena.jpg'
-im = cv2.imread(image_file, cv2.IMREAD_GRAYSCALE)
-im = cortex.vision.resize(im, out_height=200, out_width=200)
-im = im.astype(np.float64)/255.
+if __name__ == "__main__":
 
-# Build the complex steerable pyramid
-pyr = SCFpyr(height=5)
-coeff = pyr.build(im)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--image_file', type=str, default='./assets/patagonia.jpg')
+    parser.add_argument('--batch_size', type=int, default='1')
+    parser.add_argument('--image_size', type=int, default='200')
+    parser.add_argument('--pyr_nlevels', type=int, default='5')
+    parser.add_argument('--pyr_nbands', type=int, default='4')
+    parser.add_argument('--pyr_scale_factor', type=int, default='2')
+    parser.add_argument('--visualize', type=bool, default=True)
+    config = parser.parse_args()
 
-# Visualization of whole decomposition
-cv2.imshow('coeff', visualize(coeff))
+    ############################################################################
+    # Build the complex steerable pyramid
 
-# reconstruction
-out = pyr.reconstruct(coeff)
+    pyr = SCFpyr_NumPy(
+        height=config.pyr_nlevels, 
+        nbands=config.pyr_nbands,
+        scale_factor=config.pyr_scale_factor, 
+    )
 
-cv2.imshow('sub', coeff[1][0].real)
-cv2.imshow('image', im)
-cv2.imshow('reconstruction', out*255)
-cv2.waitKey(0)
+    ############################################################################
+    # Create a batch and feed-forward
 
+    start_time = time.time()
+
+    # Load Batch
+    #im_batch_numpy = skimage.io.imread('./assets/lena.jpg', as_gray=True)
+    #im_batch_numpy = im_batch_numpy[None,:,:]  # expand with batch dim
+
+    im_batch_numpy = utils.load_image_batch(config.image_file, config.batch_size, config.image_size)
+    im_batch_numpy = im_batch_numpy.squeeze(1)  # no channel dim for NumPy
+
+    # Compute Steerable Pyramid
+    start_time = time.time()
+    for image in im_batch_numpy:
+        cv2.imshow('image', image)
+        coeff = pyr.build(image)
+
+    
+    print(0, coeff.level_size(0))
+    print(1, coeff.level_size(1))
+    print(2, coeff.level_size(2))
+    print(3, coeff.level_size(3))
+
+    exit()
+
+    
+    duration = time.time()-start_time
+    print('Finishing decomposing {batch_size} images in {duration:.1f} seconds.'.format(
+        batch_size=config.batch_size,
+        duration=duration
+    ))
+
+    ############################################################################
+    # Visualization
+
+    print('#'*60)
+    for i in range(len(coeff)):
+        if isinstance(coeff[i], list):
+            print('level', i, len(coeff[i]), type(coeff[i]), coeff[i][0].shape, coeff[i][0].dtype)
+        else:
+            label = 'highpass' if i == 0 else 'lowpass'
+            print(label, len(coeff[i]), type(coeff[i]), coeff[i].shape, coeff[i].dtype)
+    print('#'*60)
+
+    if config.visualize:
+        import cv2
+        filter_viz = utils.make_grid_coeff(coeff, normalize=True)
+        cv2.imshow('coeff', filter_viz)
+        cv2.waitKey(0)
+        

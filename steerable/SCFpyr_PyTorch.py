@@ -18,16 +18,34 @@ from __future__ import print_function
 
 import numpy as np
 import torch
-import torch.nn as nn
 
 from scipy.misc import factorial
 
-import steerable.utils
-import steerable.fft as fft_utils
+import steerable.math_utils as math_utils
+pointOp = math_utils.pointOp
 
-pointOp = steerable.utils.pointOp
+################################################################################
+################################################################################
 
-np.set_printoptions(precision=4)
+class TorchBatchedPyramid(object):
+
+    def __init__(self, height, nbands):
+        self._height = height  # including low-pass and high-pass
+        self._nbands = nbands  # number of orientation bands
+        self._coeff = [None]*self._nbands
+    
+    def set_level(self, level, coeff):
+        assert len(coeff) == self._nbands
+        assert coeff.shape[-1] == 2, 'Last dim must be 2 encoding real,imag'
+        self._coeff[level] = coeff
+
+    def level_size(self, level):
+        if level in (0,self._nbands-1):
+            # Low-pass and High-pass
+            return self._coeff[level].shape[1:3]
+        return self._coeff[level][0].shape[1:3]
+
+
 
 ################################################################################
 ################################################################################
@@ -54,8 +72,8 @@ class SCFpyr_PyTorch(object):
     '''
 
     def __init__(self, height=5, nbands=4, scale_factor=2, device=None):
-        self.nbands = nbands  # number of orientation bands
         self.height = height  # including low-pass and high-pass
+        self.nbands = nbands  # number of orientation bands
         self.scale_factor = scale_factor
         self.device = torch.device('cpu') if device is None else device
 
@@ -69,29 +87,32 @@ class SCFpyr_PyTorch(object):
     # Construction of Steerable Pyramid
 
     def build(self, im_batch):
-        '''
-        Build a complex steerable pyramid  with M 5 (incl. lowpass and highpass)
-        Coeff is an array and subbands can be accessed as follows:
-          HighPass:         coeff[0] : highpass
-          BandPass Scale 1: coeff[1][0], coeff[1][1], coeff[1][2], coeff[1][3]
-          BandPass Scale 2: coeff[2][0], coeff[2][1], coeff[2][2], coeff[2][3]
-          ...
-          LowPass: coeff[4]
+        ''' Decomposes a batch of images into a complex steerable pyramid. 
+        The pyramid typically has ~4 levels and 4-8 orientations. 
+        
+        Args:
+            im_batch (torch.Tensor): Batch of images of shape [N,C,H,W]
+        
+        Returns:
+            pyramid: list containing torch.Tensor objects storing the pyramid
         '''
 
         assert im_batch.dtype == torch.float32, 'Image batch must be torch.float32'
-        assert len(im_batch.shape) == 3, 'Images batch must be grayscale'
-        _, height, width = im_batch.shape
+        assert im_batch.dim() == 4, 'Image batch must be of shape [N,C,H,W]'
+        assert im_batch.shape[1] == 1, 'Second dimension must be 1 encoding grayscale image'
+
+        _, channels, height, width = im_batch.shape
+        im_batch = im_batch.squeeze(1)  # flatten channels dim
 
         # Check whether im shape allows the pyramid M
         max_height_pyr = int(np.floor(np.log2(min(width, height))) - 2)
         assert max_height_pyr >= self.height, 'Cannot buid pyramid with more than {} levels'.format(max_height_pyr)
         
         # Prepare a grid
-        log_rad, angle = steerable.utils.prepare_grid(height, width)
+        log_rad, angle = math_utils.prepare_grid(height, width)
 
         # Radial transition function (a raised cosine in log-frequency):
-        Xrcos, Yrcos = steerable.utils.rcosFn(1, -0.5)
+        Xrcos, Yrcos = math_utils.rcosFn(1, -0.5)
         Yrcos = np.sqrt(Yrcos)
 
         YIrcos = np.sqrt(1 - Yrcos**2)
@@ -105,7 +126,7 @@ class SCFpyr_PyTorch(object):
 
         # Fourier transform (2D) and shifting
         batch_dft = torch.rfft(im_batch, signal_ndim=2, onesided=False)
-        batch_dft = fft_utils.batch_fftshift2d(batch_dft)
+        batch_dft = math_utils.batch_fftshift2d(batch_dft)
 
         # Low-pass
         lo0dft = batch_dft * lo0mask
@@ -117,7 +138,7 @@ class SCFpyr_PyTorch(object):
         hi0dft = batch_dft * hi0mask
 
         hi0 = torch.ifft(hi0dft, signal_ndim=2)
-        hi0 = fft_utils.batch_ifftshift2d(hi0)
+        hi0 = math_utils.batch_ifftshift2d(hi0)
         hi0_real = torch.unbind(hi0, -1)[0]
 
         # Note: high-pass is inserted in the beginning
@@ -144,7 +165,7 @@ class SCFpyr_PyTorch(object):
             # Low-pass
             print('LOW-PASS')
             lo0 = torch.ifft(lodft, signal_ndim=2)
-            lo0 = fft_utils.batch_fftshift2d(lo0)
+            lo0 = math_utils.batch_fftshift2d(lo0)
             lo0_real = torch.unbind(lo0, -1)[0]
             # TODO: check this level, does not seem correct
             coeff = [lo0_real]
@@ -184,7 +205,7 @@ class SCFpyr_PyTorch(object):
                 banddft_imag = self.complex_factor.real*banddft[1] + self.complex_factor.imag*banddft[0]
                 banddft = torch.stack((banddft_real, banddft_imag), -1)
 
-                band = fft_utils.batch_ifftshift2d(banddft)
+                band = math_utils.batch_ifftshift2d(banddft)
                 band = torch.ifft(band, signal_ndim=2)
                 orientations.append(band)
 
@@ -198,7 +219,7 @@ class SCFpyr_PyTorch(object):
             # Both are tuples of size 2
             low_ind_start = (np.ceil((dims+0.5)/2) - np.ceil((np.ceil((dims-0.5)/2)+0.5)/2)).astype(int)
             low_ind_end   = (low_ind_start + np.ceil((dims-0.5)/2)).astype(int)
-          
+
             # Subsampling indices
             log_rad = log_rad[low_ind_start[0]:low_ind_end[0],low_ind_start[1]:low_ind_end[1]]
             angle = angle[low_ind_start[0]:low_ind_end[0],low_ind_start[1]:low_ind_end[1]]
@@ -236,9 +257,9 @@ class SCFpyr_PyTorch(object):
             raise Exception("Unmatched number of orientations")
 
         M, N = coeff[0].shape
-        log_rad, angle = steerable.utils.prepare_grid(M, N)
+        log_rad, angle = math_utils.utils.prepare_grid(M, N)
 
-        Xrcos, Yrcos = steerable.utils.rcosFn(1, -0.5)
+        Xrcos, Yrcos = math_utils.utils.rcosFn(1, -0.5)
         Yrcos  = np.sqrt(Yrcos)
         YIrcos = np.sqrt(np.abs(1 - Yrcos*Yrcos))
 
@@ -304,5 +325,3 @@ class SCFpyr_PyTorch(object):
             resdft[lostart[0]:loend[0], lostart[1]:loend[1]] = nresdft * lomask
 
             return resdft + orientdft
-
-
