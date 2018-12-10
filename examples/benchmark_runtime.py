@@ -16,7 +16,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import os
 import time
 import argparse
 
@@ -69,52 +68,52 @@ if __name__ == "__main__":
     ############################################################################
     # Run Benchmark
 
-    # durations_numpy = np.zeros((len(config.batch_sizes), len(config.image_sizes), config.num_runs))
-    # durations_torch = np.zeros((len(config.batch_sizes), len(config.image_sizes), config.num_runs))
+    durations_numpy = np.zeros((len(config.batch_sizes), len(config.image_sizes), config.num_runs))
+    durations_torch = np.zeros((len(config.batch_sizes), len(config.image_sizes), config.num_runs))
     
-    # for batch_idx, batch_size in enumerate(config.batch_sizes):
+    for batch_idx, batch_size in enumerate(config.batch_sizes):
 
-    #     for size_idx, im_size in enumerate(config.image_sizes):
+        for size_idx, im_size in enumerate(config.image_sizes):
 
-    #         for run_idx in range(config.num_runs):
+            for run_idx in range(config.num_runs):
 
-    #             im_batch_numpy = utils.load_image_batch(config.image_file, batch_size, im_size)
-    #             im_batch_torch = torch.from_numpy(im_batch_numpy).to(device)
+                im_batch_numpy = utils.load_image_batch(config.image_file, batch_size, im_size)
+                im_batch_torch = torch.from_numpy(im_batch_numpy).to(device)
 
-    #             # NumPy implementation
-    #             start_time = time.time()
+                # NumPy implementation
+                start_time = time.time()
 
-    #             for image in im_batch_numpy:
-    #                 coeff = pyr_numpy.build(image[0,])
+                for image in im_batch_numpy:
+                    coeff = pyr_numpy.build(image[0,])
 
-    #             duration = time.time()-start_time
-    #             durations_numpy[batch_idx,size_idx,run_idx] = duration
-    #             print('BatchSize: {batch_size} | ImSize: {im_size} | NumPy Run {curr_run}/{num_run} | Duration: {duration:.3f} seconds.'.format(
-    #                 batch_size=batch_size,
-    #                 im_size=im_size,
-    #                 curr_run=run_idx+1,
-    #                 num_run=config.num_runs,
-    #                 duration=duration
-    #             ))
+                duration = time.time()-start_time
+                durations_numpy[batch_idx,size_idx,run_idx] = duration
+                print('BatchSize: {batch_size} | ImSize: {im_size} | NumPy Run {curr_run}/{num_run} | Duration: {duration:.3f} seconds.'.format(
+                    batch_size=batch_size,
+                    im_size=im_size,
+                    curr_run=run_idx+1,
+                    num_run=config.num_runs,
+                    duration=duration
+                ))
 
-    #             # PyTorch Implementation
-    #             start_time = time.time()
+                # PyTorch Implementation
+                start_time = time.time()
 
-    #             im_batch_torch = torch.from_numpy(im_batch_numpy).to(device)
-    #             coeff = pyr_torch.build(im_batch_torch)
+                im_batch_torch = torch.from_numpy(im_batch_numpy).to(device)
+                coeff = pyr_torch.build(im_batch_torch)
 
-    #             duration = time.time()-start_time
-    #             durations_torch[batch_idx,size_idx,run_idx] = duration
-    #             print('BatchSize: {batch_size} | ImSize: {im_size} | Torch Run {curr_run}/{num_run} | Duration: {duration:.3f} seconds.'.format(
-    #                 batch_size=batch_size,
-    #                 im_size=im_size,
-    #                 curr_run=run_idx+1,
-    #                 num_run=config.num_runs,
-    #                 duration=duration
-    #             ))
+                duration = time.time()-start_time
+                durations_torch[batch_idx,size_idx,run_idx] = duration
+                print('BatchSize: {batch_size} | ImSize: {im_size} | Torch Run {curr_run}/{num_run} | Duration: {duration:.3f} seconds.'.format(
+                    batch_size=batch_size,
+                    im_size=im_size,
+                    curr_run=run_idx+1,
+                    num_run=config.num_runs,
+                    duration=duration
+                ))
 
-    # np.save('./assets/durations_numpy.npy', durations_numpy)
-    # np.save('./assets/durations_torch.npy', durations_torch)
+    np.save('./assets/durations_numpy.npy', durations_numpy)
+    np.save('./assets/durations_torch.npy', durations_torch)
     
     ################################################################################
     # Plotting
