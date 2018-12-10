@@ -25,6 +25,8 @@ from steerable.visualize import visualize
 import cortex.vision
 import cv2
 
+
+
 ################################################################################
 ################################################################################
     
@@ -34,7 +36,7 @@ batch_size = 1
 image_file = './assets/lena.jpg'
 im = cv2.imread(image_file, cv2.IMREAD_GRAYSCALE)
 im = cortex.vision.resize(im, out_height=200, out_width=200)
-im = im.astype(np.float64)/255.
+im = im.astype(np.float32)/255.
 im_batch = np.tile(im, (batch_size,1,1))
 
 # Move to Torch on the GPU
@@ -52,4 +54,3 @@ coeff_batch = pyr.build(im_batch)
 filter_viz = visualize(coeff_batch, example_idx=0)
 cv2.imshow('filter visualization', filter_viz)
 cv2.waitKey(0)
-
