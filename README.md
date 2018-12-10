@@ -2,13 +2,34 @@
 
 This is a PyTorch implementation of the Complex Steerable Pyramid described in [Portilla and Simoncelli (IJCV, 2000)](http://www.cns.nyu.edu/~lcv/pubs/makeAbs.php?loc=Portilla99). 
 
+It uses PyTorch's efficient spectral decomposition layers `torch.fft` and `torch.ifft`. Just like a normal convolution layer, the complex steerable pyramid expects a batch of images of shape `[N,C,H,W]` with current support only for grayscale images (`C=1`). It returns a `list` structure containing the low-pass, high-pass and intermediate levels of the pyramid for each image in the batch (as `torch.Tensor`). Computing the steerable pyramid is significantly faster on the GPU as can be observed from the runtime benchmark below. 
+
+<a href="/assets/coeff.png"><img src="/assets/coeff.png" width="700px" ></a>
 
 ## Usage
 
 In addition to the PyTorch implementation defined in `SCFpyr_PyTorch` the original SciPy version is also included in `SCFpyr` for completeness and comparison. As the GPU implementation highly benefits from parallelization, the `cwt` and `power` methods expect signal batches of shape `[N,H,W]` containing a batch of `N` images of shape `HxW`.
 
 ```python
-# TODO: write example code
+from steerable.SCFpyr_PyTorch import SCFpyr_PyTorch
+import steerable.utils as utils
+
+# Load batch of images [N,1,H,W]
+im_batch_numpy = utils.load_image_batch(...)
+im_batch_torch = torch.from_numpy(im_batch_numpy).to(device)
+
+# Requires PyTorch with MKL when setting to 'cpu' 
+device = torch.device('cuda:0')
+
+# Initialize Complex Steerbale Pyramid
+pyr = SCFpyr_PyTorch(height=5, nbands=4, scale_factor=2, device=device)
+
+# Decompose entire batch of images 
+coeff = pyr.build(im_batch_torch)
+
+# Reconstruct batch of images again
+im_batch_reconstructed = pyr.reconstruct(coeff)
+
 ```
 
 ## Benchmark

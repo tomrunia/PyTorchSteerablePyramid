@@ -33,7 +33,7 @@ RandomCrop = torchvision.transforms.RandomCrop
 def get_device(device='cuda:0'):
     assert isinstance(device, str)
     num_cuda = torch.cuda.device_count()
-    
+
     if 'cuda' in device:
         if num_cuda > 0:
             # Found CUDA device, use the GPU
@@ -86,14 +86,14 @@ def extract_from_batch(coeff_batch, example_idx=0):
     if not isinstance(coeff_batch, list):
         raise ValueError('Batch of coefficients must be a list')
     coeff = []  # coefficient for single example
-    for level, coeff_level in enumerate(coeff_batch):
+    for coeff_level in coeff_batch:
         if isinstance(coeff_level, torch.Tensor):
             # Low- or High-Pass
             coeff_level_numpy = coeff_level[example_idx].cpu().numpy()
             coeff.append(coeff_level_numpy)
         elif isinstance(coeff_level, list):
             coeff_orientations_numpy = []
-            for orientation, coeff_orientation in enumerate(coeff_level):
+            for coeff_orientation in coeff_level:
                 coeff_orientation_numpy = coeff_orientation[example_idx].cpu().numpy()
                 coeff_orientation_numpy = coeff_orientation_numpy[:,:,0] + 1j*coeff_orientation_numpy[:,:,1]
                 coeff_orientations_numpy.append(coeff_orientation_numpy)

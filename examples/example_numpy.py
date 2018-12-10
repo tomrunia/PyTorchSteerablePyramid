@@ -54,10 +54,6 @@ if __name__ == "__main__":
 
     start_time = time.time()
 
-    # Load Batch
-    #im_batch_numpy = skimage.io.imread('./assets/lena.jpg', as_gray=True)
-    #im_batch_numpy = im_batch_numpy[None,:,:]  # expand with batch dim
-
     im_batch_numpy = utils.load_image_batch(config.image_file, config.batch_size, config.image_size)
     im_batch_numpy = im_batch_numpy.squeeze(1)  # no channel dim for NumPy
 
@@ -67,15 +63,6 @@ if __name__ == "__main__":
         cv2.imshow('image', image)
         coeff = pyr.build(image)
 
-    
-    print(0, coeff.level_size(0))
-    print(1, coeff.level_size(1))
-    print(2, coeff.level_size(2))
-    print(3, coeff.level_size(3))
-
-    exit()
-
-    
     duration = time.time()-start_time
     print('Finishing decomposing {batch_size} images in {duration:.1f} seconds.'.format(
         batch_size=config.batch_size,
@@ -84,15 +71,6 @@ if __name__ == "__main__":
 
     ############################################################################
     # Visualization
-
-    print('#'*60)
-    for i in range(len(coeff)):
-        if isinstance(coeff[i], list):
-            print('level', i, len(coeff[i]), type(coeff[i]), coeff[i][0].shape, coeff[i][0].dtype)
-        else:
-            label = 'highpass' if i == 0 else 'lowpass'
-            print(label, len(coeff[i]), type(coeff[i]), coeff[i].shape, coeff[i].dtype)
-    print('#'*60)
 
     if config.visualize:
         import cv2

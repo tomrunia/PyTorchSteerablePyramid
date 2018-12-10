@@ -21,32 +21,6 @@ from scipy.misc import factorial
 
 import steerable.math_utils as math_utils
 pointOp = math_utils.pointOp
-
-################################################################################
-################################################################################
-
-class ComplexSteerablePyramid():
-
-    def __init__(self, height, nbands):
-        self._height = height  # including low-pass and high-pass
-        self._nbands = nbands  # number of orientation bands
-        self._coeff = [None]*self._height
-    
-    def set_level(self, level, coeff):
-        self._coeff[level] = coeff
-    
-    def get_level(self, level):
-        return self._coeff[level]
-
-    def level_size(self, level):
-        if level == 0:
-            # High-pass
-            return self._coeff[level].shape
-        elif level == self._nbands:
-            # Low-pass
-            return self._coeff[level][0].shape
-        # Intermediate levels
-        return self._coeff[level][0].shape
         
 ################################################################################
 
@@ -86,14 +60,14 @@ class SCFpyr_NumPy():
     # Construction of Steerable Pyramid
 
     def build(self, im):
-        '''
-        Build a complex steerable pyramid  with M 5 (incl. lowpass and highpass)
-        Coeff is an array and subbands can be accessed as follows:
-          HighPass:         coeff[0] : highpass
-          BandPass Scale 1: coeff[1][0], coeff[1][1], coeff[1][2], coeff[1][3]
-          BandPass Scale 2: coeff[2][0], coeff[2][1], coeff[2][2], coeff[2][3]
-          ...
-          LowPass: coeff[4]
+        ''' Decomposes an image into it's complex steerable pyramid. 
+        The pyramid typically has ~4 levels and 4-8 orientations. 
+        
+        Args:
+            im_batch (np.ndarray): single image [H,W]
+        
+        Returns:
+            pyramid: list containing np.ndarray objects storing the pyramid
         '''
 
         assert len(im.shape) == 2, 'Input im must be grayscale'
@@ -115,8 +89,7 @@ class SCFpyr_NumPy():
         lo0mask = pointOp(log_rad, YIrcos, Xrcos)
         hi0mask = pointOp(log_rad, Yrcos, Xrcos)
 
-        # fftshift: Shift the zero-frequency component to the center of the spectrum.
-        # Corresponds to the TensorFlow's fftshift function
+        # Shift the zero-frequency component to the center of the spectrum.
         imdft = np.fft.fftshift(np.fft.fft2(im))
 
         # Low-pass
@@ -128,43 +101,22 @@ class SCFpyr_NumPy():
         # High-pass
         hi0dft = imdft * hi0mask
         hi0 = np.fft.ifft2(np.fft.ifftshift(hi0dft))
-
-        # print('#'*60)
-        # print('HIGH-PASS')
-        # print('  high-pass band, shape: {}'.format(hi0.real.shape))
-        # print('#'*60)
-
-        # Note: high-pass is inserted in the beginning
         coeff.insert(0, hi0.real)
 
-        # Convert to pyramid object
-        pyr = ComplexSteerablePyramid(height=self.height, nbands=self.nbands)
-        for level, level_coeff in enumerate(coeff):
-            pyr.set_level(level, level_coeff)
-
-        return pyr
+        return coeff
 
 
     def _build_levels(self, lodft, log_rad, angle, Xrcos, Yrcos, height):
-        '''
-        Recursive function for constructing levels of a complex steerable pyramid. 
-        This is called by buildSCFpyr, and is not usually called directly.
-        '''
-
-        #print('#'*60)
 
         if height <= 1:
 
             # Low-pass
-            #print('LOW-PASS')
             lo0 = np.fft.ifft2(np.fft.ifftshift(lodft))
             coeff = [lo0.real]
-            #print('  low-pass band, shape: {}, type: {}'.format(lo0.real.shape, lo0.real.dtype))
 
         else:
             
-            #print('LEVEL {}'.format(height))
-            Xrcos = Xrcos - 1
+            Xrcos = Xrcos - np.log2(self.scale_factor)
 
             ####################################################################
             ####################### Orientation bandpass #######################
@@ -204,9 +156,6 @@ class SCFpyr_NumPy():
             lomask = pointOp(log_rad, YIrcos, Xrcos)
             lodft = lomask * lodft
 
-            #print('Lowpass:')
-            #print('  lodft', lodft.shape, lodft.dtype)
-
             ####################################################################
             ####################### Recursion next level #######################
             ####################################################################
@@ -244,53 +193,77 @@ class SCFpyr_NumPy():
     def _reconstruct_levels(self, coeff, log_rad, Xrcos, Yrcos, angle):
 
         if len(coeff) == 1:
-
-            # Single level remaining, just perform Fourier transform
             return np.fft.fftshift(np.fft.fft2(coeff[0]))
 
-        else:
+    
+        Xrcos = Xrcos - np.log2(self.scale_factor)
 
-            Xrcos = Xrcos - 1
+        ####################################################################
+        ####################### Orientation Residue ########################
+        ####################################################################
 
-            ####################################################################
-            ####################### Orientation Residue ########################
-            ####################################################################
+        himask = pointOp(log_rad, Yrcos, Xrcos)
 
-            himask = pointOp(log_rad, Yrcos, Xrcos)
+        lutsize = 1024
+        Xcosn = np.pi * np.array(range(-(2*lutsize+1), (lutsize+2)))/lutsize
+        order = self.nbands - 1
+        const = np.power(2, 2*order) * np.square(factorial(order)) / (self.nbands * factorial(2*order))
+        Ycosn = np.sqrt(const) * np.power(np.cos(Xcosn), order)
 
-            lutsize = 1024
-            Xcosn = np.pi * np.array(range(-(2*lutsize+1), (lutsize+2)))/lutsize
-            order = self.nbands - 1
-            const = np.power(2, 2*order) * np.square(factorial(order)) / (self.nbands * factorial(2*order))
-            Ycosn = np.sqrt(const) * np.power(np.cos(Xcosn), order)
+        orientdft = np.zeros(coeff[0][0].shape)
 
-            orientdft = np.zeros(coeff[0][0].shape)
+        for b in range(self.nbands):
 
-            for b in range(self.nbands):
+            anglemask = pointOp(angle, Ycosn, Xcosn + np.pi * b/self.nbands)
 
-                anglemask = pointOp(angle, Ycosn, Xcosn + np.pi * b/self.nbands)
+            banddft = np.fft.fftshift(np.fft.fft2(coeff[0][b]))
+            orientdft = orientdft + np.power(np.complex(0, 1), order) * banddft * anglemask * himask
 
-                banddft = np.fft.fftshift(np.fft.fft2(coeff[0][b]))
-                orientdft = orientdft + np.power(np.complex(0, 1), order) * banddft * anglemask * himask
+        ####################################################################
+        ########## Lowpass component are upsampled and convoluted ##########
+        ####################################################################
 
-            ####################################################################
-            ########## Lowpass component are upsampled and convoluted ##########
-            ####################################################################
+        dims = np.array(coeff[0][0].shape)
 
-            dims = np.array(coeff[0][0].shape)
+        lostart = (np.ceil((dims+0.5)/2) -
+                    np.ceil((np.ceil((dims-0.5)/2)+0.5)/2)).astype(np.int32)
+        loend = lostart + np.ceil((dims-0.5)/2).astype(np.int32)
 
-            lostart = (np.ceil((dims+0.5)/2) -
-                       np.ceil((np.ceil((dims-0.5)/2)+0.5)/2)).astype(np.int32)
-            loend = lostart + np.ceil((dims-0.5)/2).astype(np.int32)
+        nlog_rad = log_rad[lostart[0]:loend[0], lostart[1]:loend[1]]
+        nangle = angle[lostart[0]:loend[0], lostart[1]:loend[1]]
+        YIrcos = np.sqrt(np.abs(1 - Yrcos * Yrcos))
+        lomask = pointOp(nlog_rad, YIrcos, Xrcos)
 
-            nlog_rad = log_rad[lostart[0]:loend[0], lostart[1]:loend[1]]
-            nangle = angle[lostart[0]:loend[0], lostart[1]:loend[1]]
-            YIrcos = np.sqrt(np.abs(1 - Yrcos * Yrcos))
-            lomask = pointOp(nlog_rad, YIrcos, Xrcos)
+        nresdft = self._reconstruct_levels(coeff[1:], nlog_rad, Xrcos, Yrcos, nangle)
+        resdft = np.zeros(dims, 'complex')
+        resdft[lostart[0]:loend[0], lostart[1]:loend[1]] = nresdft * lomask
 
-            nresdft = self._reconstruct_levels(coeff[1:], nlog_rad, Xrcos, Yrcos, nangle)
-            resdft = np.zeros(dims, 'complex')
-            resdft[lostart[0]:loend[0], lostart[1]:loend[1]] = nresdft * lomask
+        return resdft + orientdft
 
-            return resdft + orientdft
 
+################################################################################
+################################################################################
+# Work in Progress
+
+class ComplexSteerablePyramid():
+
+    def __init__(self, height, nbands):
+        self._height = height  # including low-pass and high-pass
+        self._nbands = nbands  # number of orientation bands
+        self._coeff = [None]*self._height
+    
+    def set_level(self, level, coeff):
+        self._coeff[level] = coeff
+    
+    def get_level(self, level):
+        return self._coeff[level]
+
+    def level_size(self, level):
+        if level == 0:
+            # High-pass
+            return self._coeff[level].shape
+        elif level == self._nbands:
+            # Low-pass
+            return self._coeff[level][0].shape
+        # Intermediate levels
+        return self._coeff[level][0].shape

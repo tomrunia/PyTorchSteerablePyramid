@@ -18,8 +18,6 @@ from __future__ import print_function
 
 import argparse
 import time
-
-import numpy as np
 import torch
 
 from steerable.SCFpyr_PyTorch import SCFpyr_PyTorch
@@ -71,24 +69,16 @@ if __name__ == "__main__":
         duration=duration
     ))
 
-
     ############################################################################
     # Visualization
 
+    # Just extract a single example from the batch
+    # Also moves the example to CPU and NumPy
     coeff = utils.extract_from_batch(coeff, 0)
-
-    print('#'*60)
-    for i in range(len(coeff)):
-        if isinstance(coeff[i], list):
-            print('level', i, len(coeff[i]), type(coeff[i]), coeff[i][0].shape, coeff[i][0].dtype)
-        else:
-            label = 'highpass' if i == 0 else 'lowpass'
-            print(label, len(coeff[i]), type(coeff[i]), coeff[i].shape, coeff[i].dtype)
-    print('#'*60)
 
     if config.visualize:
         import cv2
-        filter_viz = visualize_single(coeff, normalize=True)
+        filter_viz = utils.make_grid_coeff(coeff, normalize=True)
         cv2.imshow('image', im_batch_numpy[0,0,])
         cv2.imshow('coeff', filter_viz)
         cv2.waitKey(0)
