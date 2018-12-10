@@ -143,10 +143,10 @@ class SCFpyr_PyTorch(object):
 
         # Note: high-pass is inserted in the beginning
         coeff.insert(0, hi0_real)
-        print('#'*60)
-        print('HIGH-PASS')
-        print('  high-pass band, shape: {}'.format(hi0_real.shape))
-        print('#'*60)
+        # print('#'*60)
+        # print('HIGH-PASS')
+        # print('  high-pass band, shape: {}'.format(hi0_real.shape))
+        # print('#'*60)
 
         return coeff
 
@@ -158,22 +158,22 @@ class SCFpyr_PyTorch(object):
         This is called by buildSCFpyr, and is not usually called directly.
         '''
 
-        print('#'*60)
+        #print('#'*60)
 
         if height <= 1:
 
             # Low-pass
-            print('LOW-PASS')
+            #print('LOW-PASS')
             lo0 = torch.ifft(lodft, signal_ndim=2)
             lo0 = math_utils.batch_fftshift2d(lo0)
             lo0_real = torch.unbind(lo0, -1)[0]
             # TODO: check this level, does not seem correct
             coeff = [lo0_real]
-            print('  low-pass band, shape: {}'.format(lo0_real.shape))
+            #print('  low-pass band, shape: {}'.format(lo0_real.shape))
 
         else:
             
-            print('LEVEL {}'.format(height))
+            #print('LEVEL {}'.format(height))
             Xrcos = Xrcos - np.log2(self.scale_factor)
 
             ####################################################################
@@ -236,8 +236,8 @@ class SCFpyr_PyTorch(object):
             # Convolution in spatial domain
             lodft = lomask * lodft
 
-            print('Lowpass:')
-            print('  lodft', lodft.shape, lodft.dtype)
+            #print('Lowpass:')
+            #rint('  lodft', lodft.shape, lodft.dtype)
 
             ####################################################################
             ####################### Recursion next level #######################

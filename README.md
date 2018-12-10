@@ -15,9 +15,7 @@ In addition to the PyTorch implementation defined in `SCFpyr_PyTorch` the origin
 
 Performing parallel the CSP decomposition on the GPU using PyTorch results in a significant speed-up. Increasing the batch size will give faster runtimes. The plot below shows a comprison between the `scipy` versus `torch` implementation as function of the batch size `N` and input signal length. These results were obtained on a powerful Linux desktop with NVIDIA Titan X GPU.
 
-```python
-# TODO: insert figure
-```
+<a href="/assets/runtime_benchmark.pdf"><img src="/assets/runtime_benchmark.png" width="700px" ></a>
 
 ## Installation
 

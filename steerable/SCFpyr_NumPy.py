@@ -129,10 +129,10 @@ class SCFpyr_NumPy():
         hi0dft = imdft * hi0mask
         hi0 = np.fft.ifft2(np.fft.ifftshift(hi0dft))
 
-        print('#'*60)
-        print('HIGH-PASS')
-        print('  high-pass band, shape: {}'.format(hi0.real.shape))
-        print('#'*60)
+        # print('#'*60)
+        # print('HIGH-PASS')
+        # print('  high-pass band, shape: {}'.format(hi0.real.shape))
+        # print('#'*60)
 
         # Note: high-pass is inserted in the beginning
         coeff.insert(0, hi0.real)
@@ -141,7 +141,7 @@ class SCFpyr_NumPy():
         pyr = ComplexSteerablePyramid(height=self.height, nbands=self.nbands)
         for level, level_coeff in enumerate(coeff):
             pyr.set_level(level, level_coeff)
-            
+
         return pyr
 
 
@@ -151,19 +151,19 @@ class SCFpyr_NumPy():
         This is called by buildSCFpyr, and is not usually called directly.
         '''
 
-        print('#'*60)
+        #print('#'*60)
 
         if height <= 1:
 
             # Low-pass
-            print('LOW-PASS')
+            #print('LOW-PASS')
             lo0 = np.fft.ifft2(np.fft.ifftshift(lodft))
             coeff = [lo0.real]
-            print('  low-pass band, shape: {}, type: {}'.format(lo0.real.shape, lo0.real.dtype))
+            #print('  low-pass band, shape: {}, type: {}'.format(lo0.real.shape, lo0.real.dtype))
 
         else:
             
-            print('LEVEL {}'.format(height))
+            #print('LEVEL {}'.format(height))
             Xrcos = Xrcos - 1
 
             ####################################################################
@@ -204,8 +204,8 @@ class SCFpyr_NumPy():
             lomask = pointOp(log_rad, YIrcos, Xrcos)
             lodft = lomask * lodft
 
-            print('Lowpass:')
-            print('  lodft', lodft.shape, lodft.dtype)
+            #print('Lowpass:')
+            #print('  lodft', lodft.shape, lodft.dtype)
 
             ####################################################################
             ####################### Recursion next level #######################
