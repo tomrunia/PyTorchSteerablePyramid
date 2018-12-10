@@ -78,7 +78,7 @@ if __name__ == "__main__":
 
     if config.visualize:
         import cv2
-        filter_viz = utils.make_grid_coeff(coeff, normalize=True)
+        coeff_grid = utils.make_grid_coeff(coeff, normalize=True)
         cv2.imshow('image', im_batch_numpy[0,0,])
-        cv2.imshow('coeff', filter_viz)
+        cv2.imshow('coeff', coeff_grid)
         cv2.waitKey(0)

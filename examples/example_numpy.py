@@ -18,9 +18,7 @@ from __future__ import print_function
 
 import argparse
 import numpy as np
-import skimage
 import time
-import cv2
 
 from steerable.SCFpyr_NumPy import SCFpyr_NumPy
 import steerable.utils as utils
@@ -60,7 +58,6 @@ if __name__ == "__main__":
     # Compute Steerable Pyramid
     start_time = time.time()
     for image in im_batch_numpy:
-        cv2.imshow('image', image)
         coeff = pyr.build(image)
 
     duration = time.time()-start_time
@@ -74,7 +71,8 @@ if __name__ == "__main__":
 
     if config.visualize:
         import cv2
-        filter_viz = utils.make_grid_coeff(coeff, normalize=True)
-        cv2.imshow('coeff', filter_viz)
+        coeff_grid = utils.make_grid_coeff(coeff, normalize=True)
+        cv2.imshow('image', im_batch_numpy[0,])
+        cv2.imshow('coeff', coeff_grid)
         cv2.waitKey(0)
         

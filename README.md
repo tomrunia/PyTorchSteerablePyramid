@@ -30,6 +30,11 @@ coeff = pyr.build(im_batch_torch)
 # Reconstruct batch of images again
 im_batch_reconstructed = pyr.reconstruct(coeff)
 
+# Visualization
+coeff_single = utils.extract_from_batch(coeff, 0)
+coeff_grid = utils.make_grid_coeff(coeff, normalize=True)
+cv2.imshow('Complex Steerable Pyramid', coeff_grid)
+cv2.waitKey(0)
 ```
 
 ## Benchmark
