@@ -122,11 +122,6 @@ if __name__ == "__main__":
     durations_numpy = np.load('./assets/durations_numpy.npy')
     durations_torch = np.load('./assets/durations_torch.npy')
 
-    im_size_idx = 0
-
-    markers = ('o', 'd')
-    line_styles = ('--', '-')
-
     for i, num_examples in enumerate(config.batch_sizes):
         if num_examples == 8: continue
         avg_durations_numpy = np.mean(durations_numpy[i,:], -1) / num_examples
@@ -140,9 +135,9 @@ if __name__ == "__main__":
     plt.xlim((100, 550))
     plt.ylim((-0.01, 0.2))
     plt.xticks(config.image_sizes)
-    plt.legend(ncol=2)
+    plt.legend(ncol=2, loc='top left')
     plt.tight_layout()
     
-    plt.savefig('./assets/runtime_benchmark.png', dpi=320)
+    plt.savefig('./assets/runtime_benchmark.png', dpi=600)
     plt.savefig('./assets/runtime_benchmark.pdf')
     plt.show()
