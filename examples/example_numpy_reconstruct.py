@@ -16,7 +16,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import time
 import argparse
 import numpy as np
 import cv2
@@ -53,6 +52,8 @@ if __name__ == "__main__":
 
     image = cv2.imread('./assets/lena.jpg', cv2.IMREAD_GRAYSCALE)
     image = cv2.resize(image, (200,200))
+
+    # TODO: rescaling to the range [0,1] does not work...?
     #image = image.astype(np.float32)/255.
 
     # Decompose into steerable pyramid

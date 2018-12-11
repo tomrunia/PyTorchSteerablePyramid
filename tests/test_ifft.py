@@ -83,8 +83,6 @@ fft_torch_ang_viz = np.angle(fft_torch)
 ################################################################################
 # Tolerance checking
 
-
-
 all_close_real = np.allclose(np.real(fft_numpy), np.real(fft_torch), atol=tolerance)
 all_close_imag = np.allclose(np.imag(fft_numpy), np.imag(fft_torch), atol=tolerance)
 print('fft allclose real: {}'.format(all_close_real))

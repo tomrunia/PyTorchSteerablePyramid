@@ -18,63 +18,114 @@ from __future__ import print_function
 
 import numpy as np
 import torch
-
-from steerable.SCFpyr import SCFpyr
-from steerable.SCFpyr_PyTorch import SCFpyr_PyTorch
-from steerable.visualize import visualize
-
-import cortex.vision
 import cv2
+
+from steerable.SCFpyr_NumPy import SCFpyr_NumPy
+from steerable.SCFpyr_PyTorch import SCFpyr_PyTorch
+import steerable.utils as utils
 
 ################################################################################
 ################################################################################
 # Common
 
 image_file = './assets/lena.jpg'
-im = cv2.imread(image_file, cv2.IMREAD_GRAYSCALE)
-im = cortex.vision.resize(im, out_height=200, out_width=200)
-im = im.astype(np.float32)/255.
+image = cv2.imread(image_file, cv2.IMREAD_GRAYSCALE)
+image = cv2.resize(image, (200,200))
 
 # Number of pyramid levels
 pyr_height = 5
 
-################################################################################
+# Number of orientation bands
+pyr_nbands = 4
+
+# Tolerance for error checking
+tolerance = 1e-3
+
 ################################################################################
 # NumPy
 
-# Build the complex steerable pyramid
-pyr = SCFpyr(height=pyr_height)
-coeff_numpy = pyr.build(im)
+pyr_numpy = SCFpyr_NumPy(pyr_height, pyr_nbands, scale_factor=2)
+coeff_numpy = pyr_numpy.build(image)
+reconstruction_numpy = pyr_numpy.reconstruct(coeff_numpy)
 
 ################################################################################
 # PyTorch
 
-device = torch.device('cpu')
-batch_size = 16
+device = torch.device('cuda:0')
 
-# Create a batch of images
-im_batch = np.tile(im, (batch_size,1,1))
+im_batch = torch.from_numpy(image[None,None,:,:])
+im_batch = im_batch.to(device).float()
 
-# Move to Torch on the GPU
-im_batch = torch.from_numpy(im_batch)
-im_batch = im_batch.to(device)
+pyr_torch = SCFpyr_PyTorch(pyr_height, pyr_nbands, device=device)
+coeff_torch = pyr_torch.build(im_batch)
 
-# Build the complex steerable pyramid
-pyr = SCFpyr_PyTorch(height=pyr_height, scale_factor=2, device=device)
-coeff_torch = pyr.build(im_batch)
-
-# HighPass:         coeff[0] : highpass
-# BandPass Scale 1: coeff[1][0], coeff[1][1], coeff[1][2], coeff[1][3]
-# BandPass Scale 2: coeff[2][0], coeff[2][1], coeff[2][2], coeff[2][3]
+# Just extract a single example from the batch
+# Also moves the example to CPU and NumPy
+coeff_torch = utils.extract_from_batch(coeff_torch, 0)
 
 ################################################################################
+# Check correctness
 
-bands_viz_numpy = visualize(coeff_numpy)
-bands_viz_torch = visualize(coeff_torch, example_idx=0)
+print('#'*60)
+assert len(coeff_numpy) == len(coeff_torch)
 
-cv2.imshow('NumPy Bands', bands_viz_numpy)
-cv2.imshow('PyTorch Bands', bands_viz_torch)
+for level, _ in enumerate(coeff_numpy):
+
+    print('Pyramid Level {level}'.format(level=level))
+    coeff_level_numpy = coeff_numpy[level]
+    coeff_level_torch = coeff_torch[level]
+
+    assert type(coeff_level_numpy) == type(coeff_level_torch)
+    
+    if isinstance(coeff_level_numpy, np.ndarray):
+
+        # Low- or High-Pass
+        print('  NumPy.   min = {min:.3f}, max = {max:.3f},'
+              ' mean = {mean:.3f}, std = {std:.3f}'.format(
+            min=np.min(coeff_level_numpy), max=np.max(coeff_level_numpy), 
+            mean=np.mean(coeff_level_numpy), std=np.std(coeff_level_numpy)
+        ))
+        print('  PyTorch. min = {min:.3f}, max = {max:.3f},'
+              ' mean = {mean:.3f}, std = {std:.3f}'.format(
+            min=np.min(coeff_level_torch), max=np.max(coeff_level_torch), 
+            mean=np.mean(coeff_level_torch), std=np.std(coeff_level_torch)
+        ))
+
+        # Check numerical correctness
+        assert np.allclose(coeff_level_numpy, coeff_level_torch, atol=tolerance)
+
+    elif isinstance(coeff_level_numpy, list):
+
+        # Intermediate bands
+        for band, _ in enumerate(coeff_level_numpy):
+
+            band_numpy = coeff_level_numpy[band]
+            band_torch = coeff_level_torch[band]
+
+            print('  Orientation Band {}'.format(band))
+            print('    NumPy.   min = {min:.3f}, max = {max:.3f},'
+                  ' mean = {mean:.3f}, std = {std:.3f}'.format(
+                min=np.min(band_numpy), max=np.max(band_numpy), 
+                mean=np.mean(band_numpy), std=np.std(band_numpy)
+            ))
+            print('    PyTorch. min = {min:.3f}, max = {max:.3f},'
+                  ' mean = {mean:.3f}, std = {std:.3f}'.format(
+                min=np.min(band_torch), max=np.max(band_torch), 
+                mean=np.mean(band_torch), std=np.std(band_torch)
+            ))
+
+            # Check numerical correctness
+            assert np.allclose(band_numpy, band_torch, atol=tolerance)
+
+################################################################################
+# Visualize
+
+coeff_grid_numpy = utils.make_grid_coeff(coeff_numpy, normalize=True)
+coeff_grid_torch = utils.make_grid_coeff(coeff_torch, normalize=True)
+
+cv2.imshow('image', image)
+cv2.imshow('coeff numpy', coeff_grid_numpy)
+cv2.imshow('coeff torch', coeff_grid_torch)
+cv2.imshow('reconstruction numpy', reconstruction_numpy)
+
 cv2.waitKey(0)
-
-
-

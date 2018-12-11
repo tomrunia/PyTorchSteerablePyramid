@@ -73,7 +73,7 @@ class SCFpyr_NumPy():
         assert len(im.shape) == 2, 'Input im must be grayscale'
         height, width = im.shape
 
-        # Check whether im shape allows the pyramid M
+        # Check whether image size is sufficient for number of levels
         if self.height > int(np.floor(np.log2(min(width, height))) - 2):
             raise RuntimeError('Cannot build {} levels, image too small.'.format(self.height))
         
@@ -101,7 +101,6 @@ class SCFpyr_NumPy():
         hi0dft = imdft * hi0mask
         hi0 = np.fft.ifft2(np.fft.ifftshift(hi0dft))
         coeff.insert(0, hi0.real)
-
         return coeff
 
 
@@ -110,7 +109,8 @@ class SCFpyr_NumPy():
         if height <= 1:
 
             # Low-pass
-            lo0 = np.fft.ifft2(np.fft.ifftshift(lodft))
+            lo0 = np.fft.ifftshift(lodft)
+            lo0 = np.fft.ifft2(lo0)
             coeff = [lo0.real]
 
         else:
