@@ -58,6 +58,7 @@ im_batch = im_batch.to(device).float()
 
 pyr_torch = SCFpyr_PyTorch(pyr_height, pyr_nbands, device=device)
 coeff_torch = pyr_torch.build(im_batch)
+reconstruction_torch = pyr_torch.reconstruct(coeff_torch)
 
 # Just extract a single example from the batch
 # Also moves the example to CPU and NumPy
