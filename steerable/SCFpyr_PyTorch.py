@@ -77,12 +77,12 @@ class SCFpyr_PyTorch(object):
         assert im_batch.dim() == 4, 'Image batch must be of shape [N,C,H,W]'
         assert im_batch.shape[1] == 1, 'Second dimension must be 1 encoding grayscale image'
 
-        height, width = im_batch.shape[2], im_batch.shape[2] 
         im_batch = im_batch.squeeze(1)  # flatten channels dim
-
-        # Check whether im shape allows the pyramid M
-        max_height_pyr = int(np.floor(np.log2(min(width, height))) - 2)
-        assert max_height_pyr >= self.height, 'Cannot buid pyramid with more than {} levels'.format(max_height_pyr)
+        height, width = im_batch.shape[2], im_batch.shape[1] 
+        
+        # Check whether image size is sufficient for number of levels
+        if self.height > int(np.floor(np.log2(min(width, height))) - 2):
+            raise RuntimeError('Cannot build {} levels, image too small.'.format(self.height))
         
         # Prepare a grid
         log_rad, angle = math_utils.prepare_grid(height, width)
@@ -112,12 +112,10 @@ class SCFpyr_PyTorch(object):
 
         # High-pass
         hi0dft = batch_dft * hi0mask
-
-        hi0 = torch.ifft(hi0dft, signal_ndim=2)
-        hi0 = math_utils.batch_ifftshift2d(hi0)
+        hi0 = math_utils.batch_ifftshift2d(hi0dft)
+        hi0 = torch.ifft(hi0, signal_ndim=2)
         hi0_real = torch.unbind(hi0, -1)[0]
         coeff.insert(0, hi0_real)
-
         return coeff
 
 
@@ -126,10 +124,9 @@ class SCFpyr_PyTorch(object):
         if height <= 1:
 
             # Low-pass
-            lo0 = torch.ifft(lodft, signal_ndim=2)
-            lo0 = math_utils.batch_fftshift2d(lo0)
+            lo0 = math_utils.batch_ifftshift2d(lodft)
+            lo0 = torch.ifft(lo0, signal_ndim=2)
             lo0_real = torch.unbind(lo0, -1)[0]
-            # TODO: check correctess of these ops...
             coeff = [lo0_real]
 
         else:
@@ -210,15 +207,13 @@ class SCFpyr_PyTorch(object):
 
     def reconstruct(self, coeff):
 
-        raise NotImplementedError('Reconstruction using PyTorch is work in progres...')
-
         if self.nbands != len(coeff[1]):
             raise Exception("Unmatched number of orientations")
 
-        M, N = coeff[0].shape
-        log_rad, angle = math_utils.utils.prepare_grid(M, N)
+        height, width = coeff[0].shape[2], coeff[0].shape[1] 
+        log_rad, angle = math_utils.prepare_grid(height, width)
 
-        Xrcos, Yrcos = math_utils.utils.rcosFn(1, -0.5)
+        Xrcos, Yrcos = math_utils.rcosFn(1, -0.5)
         Yrcos  = np.sqrt(Yrcos)
         YIrcos = np.sqrt(np.abs(1 - Yrcos*Yrcos))
 
@@ -227,11 +222,14 @@ class SCFpyr_PyTorch(object):
 
         tempdft = self._reconstruct_levels(coeff[1:], log_rad, Xrcos, Yrcos, angle)
 
-        hidft = np.fft.fftshift(np.fft.fft2(coeff[0]))
+        hidft = torch.fft(coeff[0], signal_ndim=2)
+        hidft = math_utils.batch_fftshift2d(hidft)
+        
         outdft = tempdft * lo0mask + hidft * hi0mask
 
-        return np.fft.ifft2(np.fft.ifftshift(outdft)).real.astype(int)
-
+        reconstruction = math_utils.batch_fftshift2d(outdft)
+        reconstruction = torch.ifft(reconstruction, signal_ndim=2).real.astype(int)
+        return reconstruction
 
     def _reconstruct_levels(self, coeff, log_rad, Xrcos, Yrcos, angle):
         
