@@ -16,9 +16,9 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import time
 import argparse
 import numpy as np
-import time
 
 from steerable.SCFpyr_NumPy import SCFpyr_NumPy
 import steerable.utils as utils

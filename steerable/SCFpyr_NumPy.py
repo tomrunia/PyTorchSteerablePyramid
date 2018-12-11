@@ -74,8 +74,8 @@ class SCFpyr_NumPy():
         height, width = im.shape
 
         # Check whether im shape allows the pyramid M
-        max_height_pyr = int(np.floor(np.log2(min(width, height))) - 2)
-        assert max_height_pyr >= self.height, 'Cannot buid pyramid heigher than {} levels'.format(max_height_pyr)
+        if self.height > int(np.floor(np.log2(min(width, height))) - 2):
+            raise RuntimeError('Cannot build {} levels, image too small.'.format(self.height))
         
         # Prepare a grid
         log_rad, angle = math_utils.prepare_grid(height, width)
@@ -85,7 +85,6 @@ class SCFpyr_NumPy():
         Yrcos = np.sqrt(Yrcos)
 
         YIrcos = np.sqrt(1 - Yrcos**2)
-
         lo0mask = pointOp(log_rad, YIrcos, Xrcos)
         hi0mask = pointOp(log_rad, Yrcos, Xrcos)
 

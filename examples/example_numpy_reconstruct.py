@@ -16,9 +16,10 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import time
 import argparse
 import numpy as np
-import time
+import cv2
 
 from steerable.SCFpyr_NumPy import SCFpyr_NumPy
 import steerable.utils as utils
@@ -50,29 +51,33 @@ if __name__ == "__main__":
     ############################################################################
     # Create a batch and feed-forward
 
-    start_time = time.time()
+    image = cv2.imread('./assets/lena.jpg', cv2.IMREAD_GRAYSCALE)
+    image = cv2.resize(image, (200,200))
+    #image = image.astype(np.float32)/255.
 
-    im_batch_numpy = utils.load_image_batch(config.image_file, config.batch_size, config.image_size)
-    im_batch_numpy = im_batch_numpy.squeeze(1)  # no channel dim for NumPy
+    # Decompose into steerable pyramid
+    coeff = pyr.build(image)
 
-    # Compute Steerable Pyramid
-    coeff = pyr.build(im_batch_numpy[0,]*225)
-
-    # And reconstruct
+    # Reconstruct the image from the pyramid coefficients
     reconstruction = pyr.reconstruct(coeff)
+
     reconstruction = reconstruction.astype(np.float32)
     reconstruction = np.ascontiguousarray(reconstruction)
+    reconstruction /= 255.
 
-    import cortex.vision
-    reconstruction = cortex.vision.normalize_for_display(reconstruction)
+    ############################################################################
+
+    tolerance = 1e-4
+    print('image', np.mean(image), np.std(image))
+    print('reconstruction', np.mean(reconstruction), np.std(reconstruction))
+    print('allclose', np.allclose(image, reconstruction, atol=tolerance))
 
     ############################################################################
     # Visualization
 
     if config.visualize:
-        import cv2
         coeff_grid = utils.make_grid_coeff(coeff, normalize=True)
-        cv2.imshow('image', im_batch_numpy[0,])
+        cv2.imshow('image', image)
         cv2.imshow('reconstruction', reconstruction)
         cv2.imshow('coeff', coeff_grid)
         cv2.waitKey(0)
