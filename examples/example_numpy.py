@@ -18,7 +18,6 @@ from __future__ import print_function
 
 import time
 import argparse
-import numpy as np
 
 from steerable.SCFpyr_NumPy import SCFpyr_NumPy
 import steerable.utils as utils

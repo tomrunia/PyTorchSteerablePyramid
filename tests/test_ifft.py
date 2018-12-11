@@ -18,7 +18,6 @@ from __future__ import print_function
 
 import numpy as np
 import torch
-import torch.nn as nn
 import cv2
 
 import steerable.fft as fft_utils

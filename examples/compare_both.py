@@ -75,21 +75,20 @@ for level, _ in enumerate(coeff_numpy):
     coeff_level_numpy = coeff_numpy[level]
     coeff_level_torch = coeff_torch[level]
 
-    assert type(coeff_level_numpy) == type(coeff_level_torch)
+    assert isinstance(coeff_level_torch, type(coeff_level_numpy))
     
     if isinstance(coeff_level_numpy, np.ndarray):
 
         # Low- or High-Pass
         print('  NumPy.   min = {min:.3f}, max = {max:.3f},'
               ' mean = {mean:.3f}, std = {std:.3f}'.format(
-            min=np.min(coeff_level_numpy), max=np.max(coeff_level_numpy), 
-            mean=np.mean(coeff_level_numpy), std=np.std(coeff_level_numpy)
-        ))
+                  min=np.min(coeff_level_numpy), max=np.max(coeff_level_numpy), 
+                  mean=np.mean(coeff_level_numpy), std=np.std(coeff_level_numpy)))
+
         print('  PyTorch. min = {min:.3f}, max = {max:.3f},'
               ' mean = {mean:.3f}, std = {std:.3f}'.format(
-            min=np.min(coeff_level_torch), max=np.max(coeff_level_torch), 
-            mean=np.mean(coeff_level_torch), std=np.std(coeff_level_torch)
-        ))
+                  min=np.min(coeff_level_torch), max=np.max(coeff_level_torch), 
+                  mean=np.mean(coeff_level_torch), std=np.std(coeff_level_torch)))
 
         # Check numerical correctness
         assert np.allclose(coeff_level_numpy, coeff_level_torch, atol=tolerance)
@@ -105,14 +104,13 @@ for level, _ in enumerate(coeff_numpy):
             print('  Orientation Band {}'.format(band))
             print('    NumPy.   min = {min:.3f}, max = {max:.3f},'
                   ' mean = {mean:.3f}, std = {std:.3f}'.format(
-                min=np.min(band_numpy), max=np.max(band_numpy), 
-                mean=np.mean(band_numpy), std=np.std(band_numpy)
-            ))
+                      min=np.min(band_numpy), max=np.max(band_numpy), 
+                      mean=np.mean(band_numpy), std=np.std(band_numpy)))
+
             print('    PyTorch. min = {min:.3f}, max = {max:.3f},'
                   ' mean = {mean:.3f}, std = {std:.3f}'.format(
-                min=np.min(band_torch), max=np.max(band_torch), 
-                mean=np.mean(band_torch), std=np.std(band_torch)
-            ))
+                      min=np.min(band_torch), max=np.max(band_torch), 
+                      mean=np.mean(band_torch), std=np.std(band_torch)))
 
             # Check numerical correctness
             assert np.allclose(band_numpy, band_torch, atol=tolerance)

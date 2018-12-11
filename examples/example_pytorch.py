@@ -82,3 +82,4 @@ if __name__ == "__main__":
         cv2.imshow('image', im_batch_numpy[0,0,])
         cv2.imshow('coeff', coeff_grid)
         cv2.waitKey(0)
+        

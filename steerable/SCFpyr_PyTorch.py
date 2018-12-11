@@ -269,7 +269,7 @@ class SCFpyr_PyTorch(object):
         dims = np.array(coeff[0][0].shape)
 
         lostart = (np.ceil((dims+0.5)/2) -
-                    np.ceil((np.ceil((dims-0.5)/2)+0.5)/2)).astype(np.int32)
+                   np.ceil((np.ceil((dims-0.5)/2)+0.5)/2)).astype(np.int32)
         loend = lostart + np.ceil((dims-0.5)/2).astype(np.int32)
 
         nlog_rad = log_rad[lostart[0]:loend[0], lostart[1]:loend[1]]
