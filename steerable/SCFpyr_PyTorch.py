@@ -77,7 +77,7 @@ class SCFpyr_PyTorch(object):
         assert im_batch.dim() == 4, 'Image batch must be of shape [N,C,H,W]'
         assert im_batch.shape[1] == 1, 'Second dimension must be 1 encoding grayscale image'
 
-        height, width = im_batch.shape[2], im_batch.shape[2] 
+        height, width = im_batch.shape[2], im_batch.shape[1] 
         im_batch = im_batch.squeeze(1)  # flatten channels dim
 
         # Check whether im shape allows the pyramid M
@@ -210,15 +210,13 @@ class SCFpyr_PyTorch(object):
 
     def reconstruct(self, coeff):
 
-        raise NotImplementedError('Reconstruction using PyTorch is work in progres...')
-
         if self.nbands != len(coeff[1]):
             raise Exception("Unmatched number of orientations")
 
-        M, N = coeff[0].shape
-        log_rad, angle = math_utils.utils.prepare_grid(M, N)
+        height, width = coeff[0].shape[2], coeff[0].shape[1] 
+        log_rad, angle = math_utils.prepare_grid(height, width)
 
-        Xrcos, Yrcos = math_utils.utils.rcosFn(1, -0.5)
+        Xrcos, Yrcos = math_utils.rcosFn(1, -0.5)
         Yrcos  = np.sqrt(Yrcos)
         YIrcos = np.sqrt(np.abs(1 - Yrcos*Yrcos))
 
@@ -227,11 +225,14 @@ class SCFpyr_PyTorch(object):
 
         tempdft = self._reconstruct_levels(coeff[1:], log_rad, Xrcos, Yrcos, angle)
 
-        hidft = np.fft.fftshift(np.fft.fft2(coeff[0]))
+        hidft = torch.fft(coeff[0])
+        hidft = math_utils.batch_fftshift2d(hidft)
+        
         outdft = tempdft * lo0mask + hidft * hi0mask
 
-        return np.fft.ifft2(np.fft.ifftshift(outdft)).real.astype(int)
-
+        reconstruction = math_utils.batch_fftshift2d(outdft)
+        reconstruction = torch.ifft(reconstruction).real.astype(int)
+        return reconstruction
 
     def _reconstruct_levels(self, coeff, log_rad, Xrcos, Yrcos, angle):
         

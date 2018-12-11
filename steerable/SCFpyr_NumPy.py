@@ -188,7 +188,8 @@ class SCFpyr_NumPy():
         hidft = np.fft.fftshift(np.fft.fft2(coeff[0]))
         outdft = tempdft * lo0mask + hidft * hi0mask
 
-        return np.fft.ifft2(np.fft.ifftshift(outdft)).real.astype(int)
+        reconstruction = np.fft.ifft2(np.fft.ifftshift(outdft)).real.astype(int)
+        return reconstruction
 
     def _reconstruct_levels(self, coeff, log_rad, Xrcos, Yrcos, angle):
 
