@@ -188,8 +188,27 @@ class SCFpyr_NumPy():
         hidft = np.fft.fftshift(np.fft.fft2(coeff[0]))
         outdft = tempdft * lo0mask + hidft * hi0mask
 
+        real = outdft.real
+        imag = outdft.imag
+        print('  [numpy] levels remaining {}. outdft real ({:.3f}, {:.3f}, {:.3f})'.format(
+            len(coeff), real.mean().item(), real.std().item(), real.sum().item()  
+        ))
+        print('  [numpy] levels remaining {}. outdft imag ({:.3f}, {:.3f}, {:.3f})'.format(
+            len(coeff), imag.mean().item(), imag.std().item(), imag.sum().item()  
+        ))
+
         reconstruction = np.fft.ifftshift(outdft)
         reconstruction = np.fft.ifft2(reconstruction)
+
+        real = reconstruction.real
+        imag = reconstruction.imag
+        print('  [numpy] levels remaining {}. outdft real ({:.3f}, {:.3f}, {:.3f})'.format(
+            len(coeff), real.mean().item(), real.std().item(), real.sum().item()  
+        ))
+        print('  [numpy] levels remaining {}. outdft imag ({:.3f}, {:.3f}, {:.3f})'.format(
+            len(coeff), imag.mean().item(), imag.std().item(), imag.sum().item()  
+        ))
+
         reconstruction = reconstruction.real.astype(np.uint8)
 
         return reconstruction
