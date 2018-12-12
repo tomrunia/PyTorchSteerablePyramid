@@ -186,51 +186,11 @@ class SCFpyr_NumPy():
         tempdft = self._reconstruct_levels(coeff[1:], log_rad, Xrcos, Yrcos, angle)
 
         hidft = np.fft.fftshift(np.fft.fft2(coeff[0]))
-
-        real, imag = hidft.real, hidft.imag
-        print('  [numpy] level final. hidft real ({:.3f}, {:.3f}, {:.3f})'.format(
-            real[0:20,0:20].min().item(), real[0:20,0:20].mean().item(), real[0:20,0:20].max().item()  
-        ))
-        print('  [numpy] level final. hidft imag ({:.3f}, {:.3f}, {:.3f})'.format(
-            imag[0:20,0:20].min().item(), imag[0:20,0:20].mean().item(), imag[0:20,0:20].max().item()  
-        ))
-
         outdft = tempdft * lo0mask + hidft * hi0mask
 
-        real, imag = outdft.real, outdft.imag
-        np.save('./assets/numpy_outdft_real.npy', real)
-        np.save('./assets/numpy_outdft_imag.npy', imag)
-
-        print('  [numpy] level final. outdft real ({:.3f}, {:.3f}, {:.3f})'.format(
-            real[0:20,0:20].min().item(), real[0:20,0:20].mean().item(), real[0:20,0:20].max().item()  
-        ))
-        print('  [numpy] level final. outdft imag ({:.3f}, {:.3f}, {:.3f})'.format(
-            imag[0:20,0:20].min().item(), imag[0:20,0:20].mean().item(), imag[0:20,0:20].max().item()  
-        ))
-
-        import cv2
-        import cortex.vision
-        
         reconstruction = np.fft.ifftshift(outdft)
-
-        real, imag = reconstruction.real, reconstruction.imag
-        print('  [numpy] level final. ifftshift real ({:.3f}, {:.3f}, {:.3f})'.format(
-            real[0:20,0:20].min().item(), real[0:20,0:20].mean().item(), real[0:20,0:20].max().item()  
-        ))
-        print('  [numpy] level final. ifftshift imag ({:.3f}, {:.3f}, {:.3f})'.format(
-            imag[0:20,0:20].min().item(), imag[0:20,0:20].mean().item(), imag[0:20,0:20].max().item()  
-        ))
-
-        real, imag = reconstruction.real, reconstruction.imag
-        cv2.imshow('numpy real', real)
-        cv2.imshow('numpy imag', imag)
-
         reconstruction = np.fft.ifft2(reconstruction)
-        reconstruction = reconstruction.real
-
-        print('  [numpy] level final. reconstruction real ({:.3f}, {:.3f}, {:.3f})'.format(
-            reconstruction.min(), reconstruction.mean(), reconstruction.max()  
-        ))
+        reconstruction = reconstruction.real.astype(np.uint8)
 
         return reconstruction
 
@@ -239,6 +199,15 @@ class SCFpyr_NumPy():
         if len(coeff) == 1:
             dft = np.fft.fft2(coeff[0])
             dft = np.fft.fftshift(dft)
+
+            real, imag = dft.real, dft.imag
+            print('  [numpy] levels remaining {}. dft real ({:.3f}, {:.3f}, {:.3f})'.format(
+                len(coeff), real.mean().item(), real.std().item(), real.sum().item()  
+            ))
+            print('  [numpy] levels remaining {}. dft imag ({:.3f}, {:.3f}, {:.3f})'.format(
+                len(coeff), imag.mean().item(), imag.std().item(), imag.sum().item()  
+            ))
+
             return dft
 
         Xrcos = Xrcos - np.log2(self.scale_factor)
@@ -267,10 +236,10 @@ class SCFpyr_NumPy():
         real = orientdft.real
         imag = orientdft.imag
         print('  [numpy] levels remaining {}. orientdft real ({:.3f}, {:.3f}, {:.3f})'.format(
-            len(coeff), real.min().item(), real.mean().item(), real.max().item()  
+            len(coeff), real.mean().item(), real.std().item(), real.sum().item()  
         ))
-        print('  [numpy] levels remaining {}. orientdft real ({:.3f}, {:.3f}, {:.3f})'.format(
-            len(coeff), imag.min().item(), imag.mean().item(), imag.max().item()  
+        print('  [numpy] levels remaining {}. orientdft imag ({:.3f}, {:.3f}, {:.3f})'.format(
+            len(coeff), imag.mean().item(), imag.std().item(), imag.sum().item()  
         ))
 
         ####################################################################
@@ -279,19 +248,33 @@ class SCFpyr_NumPy():
 
         dims = np.array(coeff[0][0].shape)
 
-        lostart = (np.ceil((dims+0.5)/2) -
-                    np.ceil((np.ceil((dims-0.5)/2)+0.5)/2)).astype(np.int32)
+        lostart = (np.ceil((dims+0.5)/2) - np.ceil((np.ceil((dims-0.5)/2)+0.5)/2)).astype(np.int32)
         loend = lostart + np.ceil((dims-0.5)/2).astype(np.int32)
 
         nlog_rad = log_rad[lostart[0]:loend[0], lostart[1]:loend[1]]
         nangle = angle[lostart[0]:loend[0], lostart[1]:loend[1]]
-        YIrcos = np.sqrt(np.abs(1 - Yrcos * Yrcos))
+        YIrcos = np.sqrt(np.abs(1 - Yrcos**2))
         lomask = pointOp(nlog_rad, YIrcos, Xrcos)
 
+        print('  [numpy] levels remaining {}. nlog_rad = {:.3f}, nangle = {:.3f}, YIrcos = {:.3f}, lomask = {:.3f}'.format(
+            len(coeff), nlog_rad.sum(), nangle.sum(), YIrcos.sum(), lomask.sum()
+        ))
+
+        ################################################################################
+
+        # Recursive call for image reconstruction
         nresdft = self._reconstruct_levels(coeff[1:], nlog_rad, Xrcos, Yrcos, nangle)
 
         resdft = np.zeros(dims, 'complex')
         resdft[lostart[0]:loend[0], lostart[1]:loend[1]] = nresdft * lomask
+
+        real, imag = nresdft.real, nresdft.imag
+        print('  [numpy] levels remaining {}. nresdft real ({:.3f}, {:.3f}, {:.3f})'.format(
+            len(coeff), real.mean().item(), real.std().item(), real.sum().item()  
+        ))
+        print('  [numpy] levels remaining {}. nresdft imag ({:.3f}, {:.3f}, {:.3f})'.format(
+            len(coeff), imag.mean().item(), imag.std().item(), imag.sum().item()  
+        ))
 
         return resdft + orientdft
 
