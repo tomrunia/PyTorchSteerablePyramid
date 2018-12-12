@@ -58,7 +58,8 @@ class SCFpyr_PyTorch(object):
         self.lutsize = 1024
         self.Xcosn = np.pi * np.array(range(-(2*self.lutsize+1), (self.lutsize+2)))/self.lutsize
         self.alpha = (self.Xcosn + np.pi) % (2*np.pi) - np.pi
-        self.complex_factor = np.power(np.complex(0, -1), self.nbands - 1)
+        self.complex_fact_construct = np.power(np.complex(0, -1), self.nbands-1)
+        self.complex_fact_reconstruct = np.power(np.complex(0, 1), self.nbands-1)
         
     ################################################################################
     # Construction of Steerable Pyramid
@@ -158,8 +159,8 @@ class SCFpyr_PyTorch(object):
                 # Now multiply with complex number
                 # (x+yi)(u+vi) = (xu-yv) + (xv+yu)i
                 banddft = torch.unbind(banddft, -1)
-                banddft_real = self.complex_factor.real*banddft[0] - self.complex_factor.imag*banddft[1]
-                banddft_imag = self.complex_factor.real*banddft[1] + self.complex_factor.imag*banddft[0]
+                banddft_real = self.complex_fact_construct.real*banddft[0] - self.complex_fact_construct.imag*banddft[1]
+                banddft_imag = self.complex_fact_construct.real*banddft[1] + self.complex_fact_construct.imag*banddft[0]
                 banddft = torch.stack((banddft_real, banddft_imag), -1)
 
                 band = math_utils.batch_ifftshift2d(banddft)
@@ -202,8 +203,9 @@ class SCFpyr_PyTorch(object):
 
         return coeff
 
-    ################################################################################
-    # Reconstruction to Image
+    ############################################################################
+    ########################### RECONSTRUCTION #################################
+    ############################################################################
 
     def reconstruct(self, coeff):
 
@@ -215,7 +217,7 @@ class SCFpyr_PyTorch(object):
 
         Xrcos, Yrcos = math_utils.rcosFn(1, -0.5)
         Yrcos  = np.sqrt(Yrcos)
-        YIrcos = np.sqrt(np.abs(1 - Yrcos*Yrcos))
+        YIrcos = np.sqrt(np.abs(1 - Yrcos**2))
 
         lo0mask = pointOp(log_rad, YIrcos, Xrcos)
         hi0mask = pointOp(log_rad, Yrcos, Xrcos)
@@ -224,18 +226,65 @@ class SCFpyr_PyTorch(object):
         lo0mask = torch.from_numpy(lo0mask).float()[None,:,:,None].to(self.device)
         hi0mask = torch.from_numpy(hi0mask).float()[None,:,:,None].to(self.device)
 
-        tmp = coeff[1:]
+        # Start recursive reconstruction
         tempdft = self._reconstruct_levels(coeff[1:], log_rad, Xrcos, Yrcos, angle)
 
         hidft = torch.rfft(coeff[0], signal_ndim=2, onesided=False)
         hidft = math_utils.batch_fftshift2d(hidft)
+
+        real, imag = torch.unbind(hidft, -1)
+        print('  [torch] level final. hidft real ({:.3f}, {:.3f}, {:.3f})'.format(
+            real[0,0:20,0:20].min().item(), real[0,0:20,0:20].mean().item(), real[0,0:20,0:20].max().item()  
+        ))
+        print('  [torch] level final. hidft imag ({:.3f}, {:.3f}, {:.3f})'.format(
+            imag[0,0:20,0:20].min().item(), imag[0,0:20,0:20].mean().item(), imag[0,0:20,0:20].max().item()  
+        ))
         
         outdft = tempdft * lo0mask + hidft * hi0mask
 
+        real, imag = torch.unbind(outdft, -1)
+        np.save('./assets/torch_outdft_real.npy', real[0].cpu().numpy())
+        np.save('./assets/torch_outdft_imag.npy', imag[0].cpu().numpy())
+
+        print('  [torch] level final. outdft real ({:.3f}, {:.3f}, {:.3f})'.format(
+            real[0,0:20,0:20].min().item(), real[0,0:20,0:20].mean().item(), real[0,0:20,0:20].max().item()  
+        ))
+        print('  [torch] level final. outdft imag ({:.3f}, {:.3f}, {:.3f})'.format(
+            imag[0,0:20,0:20].min().item(), imag[0,0:20,0:20].mean().item(), imag[0,0:20,0:20].max().item()  
+        ))
+
         # TODO: check these ops (!)
-        reconstruction = math_utils.batch_fftshift2d(outdft)
-        reconstruction = torch.ifft(reconstruction, signal_ndim=2)
+        # hidft = np.fft.fftshift(np.fft.fft2(coeff[0]))
+        # outdft = tempdft * lo0mask + hidft * hi0mask
+        
+        import cv2
+        import cortex.vision
+
+        
+        
+        # reconstruction = np.fft.ifft2(np.fft.ifftshift(outdft))
+        # reconstruction = reconstruction.real.astype(int)
+        reconstruction = math_utils.batch_ifftshift2d(outdft)
+
+        real, imag = torch.unbind(reconstruction, -1)
+        print('  [torch] level final. ifftshift real ({:.3f}, {:.3f}, {:.3f})'.format(
+            real[0,0:20,0:20].min().item(), real[0,0:20,0:20].mean().item(), real[0,0:20,0:20].max().item()  
+        ))
+        print('  [torch] level final. ifftshift imag ({:.3f}, {:.3f}, {:.3f})'.format(
+            imag[0,0:20,0:20].min().item(), imag[0,0:20,0:20].mean().item(), imag[0,0:20,0:20].max().item()  
+        ))
+
+        #real, imag = reconstruction, reconstruction #qtorch.unbind(reconstruction, -1)
+        cv2.imshow('real', real.cpu().numpy()[0])
+        cv2.imshow('imag', imag.cpu().numpy()[0])
+        
+        # this fucks it up ...
+        reconstruction = torch.ifft(reconstruction, signal_ndim=2) #, onesided=False)
         reconstruction_real = torch.unbind(reconstruction, -1)[0]
+
+        print('  [torch] level final. reconstruction real ({:.3f}, {:.3f}, {:.3f})'.format(
+            reconstruction_real.min().item(), reconstruction_real.mean().item(), reconstruction_real.max().item()  
+        ))
 
         return reconstruction_real
 
@@ -262,7 +311,6 @@ class SCFpyr_PyTorch(object):
         Ycosn = np.sqrt(const) * np.power(np.cos(Xcosn), order)
 
         orientdft = torch.zeros_like(coeff[0][0])
-
         for b in range(self.nbands):
 
             anglemask = pointOp(angle, Ycosn, Xcosn + np.pi * b/self.nbands)
@@ -275,58 +323,34 @@ class SCFpyr_PyTorch(object):
             # Now multiply with complex number
             # (x+yi)(u+vi) = (xu-yv) + (xv+yu)i
             banddft = torch.unbind(banddft, -1)
-            banddft_real = self.complex_factor.real*banddft[0] - self.complex_factor.imag*banddft[1]
-            banddft_imag = self.complex_factor.real*banddft[1] + self.complex_factor.imag*banddft[0]
+            banddft_real = self.complex_fact_reconstruct.real*banddft[0] - self.complex_fact_reconstruct.imag*banddft[1]
+            banddft_imag = self.complex_fact_reconstruct.real*banddft[1] + self.complex_fact_reconstruct.imag*banddft[0]
             banddft = torch.stack((banddft_real, banddft_imag), -1)
             banddft = banddft * anglemask * himask
             orientdft += banddft
+        
+        real, imag = torch.unbind(orientdft, -1)
+        print('  [torch] levels remaining {}. orientdft real ({:.3f}, {:.3f}, {:.3f})'.format(
+            len(coeff), real.min().item(), real.mean().item(), real.max().item()  
+        ))
+        print('  [torch] levels remaining {}. orientdft real ({:.3f}, {:.3f}, {:.3f})'.format(
+            len(coeff), imag.min().item(), imag.mean().item(), imag.max().item()  
+        ))
 
         ####################################################################
         ########## Lowpass component are upsampled and convoluted ##########
         ####################################################################
-
-        # Don't consider batch_size and imag/real dim
-        # dims = np.array(coeff[0][0].shape[1:3])  
-
-        # # Both are tuples of size 2
-        # low_ind_start = (np.ceil((dims+0.5)/2) - np.ceil((np.ceil((dims-0.5)/2)+0.5)/2)).astype(int)
-        # low_ind_end   = (low_ind_start + np.ceil((dims-0.5)/2)).astype(int)
-
-        # # Subsampling indices
-        # nlog_rad = log_rad[low_ind_start[0]:low_ind_end[0],low_ind_start[1]:low_ind_end[1]]
-        # nangle = angle[low_ind_start[0]:low_ind_end[0],low_ind_start[1]:low_ind_end[1]]
-
-        ################################################################################
         
-        # batch_size = len(coeff[0][0])
-        # dims = np.array(coeff[0][0].shape[1:3])
-
-        # dims = np.array(coeff[0][0].shape[1:3])
-        # lostart = (np.ceil((dims+0.5)/2) - np.ceil((np.ceil((dims-0.5)/2)+0.5)/2)).astype(np.int32)
-        # loend = lostart + np.ceil((dims-0.5)/2).astype(np.int32)
-        # nlog_rad = log_rad[lostart[0]:loend[0], lostart[1]:loend[1]]  # 25,25
-        # nangle = angle[lostart[0]:loend[0], lostart[1]:loend[1]]
-        # YIrcos = np.sqrt(np.abs(1 - Yrcos * Yrcos))
-
-        # # Filtering
-        # lomask = pointOp(log_rad, YIrcos, Xrcos)
-        # lomask = torch.from_numpy(lomask[None,:,:,None])
-        # lomask = lomask..float().to(self.device)
-
-        ################################################################################
-        # WORKS:
-        
-        batch_size = len(coeff[0][0])
         dims = np.array(coeff[0][0].shape[1:3])
-        print(dims)
         
-        lostart = (np.ceil((dims+0.5)/2) -
-                   np.ceil((np.ceil((dims-0.5)/2)+0.5)/2)).astype(np.int32)
+        lostart = (np.ceil((dims+0.5)/2) - np.ceil((np.ceil((dims-0.5)/2)+0.5)/2)).astype(np.int32)
         loend = lostart + np.ceil((dims-0.5)/2).astype(np.int32)
 
         nlog_rad = log_rad[lostart[0]:loend[0], lostart[1]:loend[1]]
         nangle = angle[lostart[0]:loend[0], lostart[1]:loend[1]]
         YIrcos = np.sqrt(np.abs(1 - Yrcos * Yrcos))
+
+        # Filtering
         lomask = pointOp(nlog_rad, YIrcos, Xrcos)
         lomask = torch.from_numpy(lomask[None,:,:,None])
         lomask = lomask.float().to(self.device)
@@ -337,16 +361,7 @@ class SCFpyr_PyTorch(object):
         nresdft = self._reconstruct_levels(coeff[1:], nlog_rad, Xrcos, Yrcos, nangle)
 
         resdft = torch.zeros_like(coeff[0][0]).to(self.device)
-        # nresdft is of incorrect size [1,25,13,2]
-        # lomask of shape [1,25,25,1]
-        print('  [torch] nresdft', nresdft.shape)
-        print('  [torch] lomask', lomask.shape)
-        print('  [torch] resdft', resdft.shape)
-        print('  [torch] lostart[0] - loend[0]', lostart[0], loend[0])
-        print('  [torch] lostart[1] - loend[1]', lostart[1], loend[1])
-
-        tmp = nresdft * lomask
-        resdft[:,lostart[0]:loend[0], lostart[1]:loend[1],:] = tmp
+        resdft[:,lostart[0]:loend[0], lostart[1]:loend[1],:] = nresdft * lomask
 
         return resdft + orientdft
 

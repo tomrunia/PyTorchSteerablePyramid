@@ -67,6 +67,9 @@ reconstruction_torch = reconstruction_torch.cpu().numpy()
 # Also moves the example to CPU and NumPy
 coeff_torch = utils.extract_from_batch(coeff_torch, 0)
 
+cv2.waitKey(0)
+exit()
+
 ################################################################################
 # Check correctness
 

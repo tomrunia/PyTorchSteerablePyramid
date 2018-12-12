@@ -164,20 +164,21 @@ class SCFpyr_NumPy():
 
         return coeff
 
-    ################################################################################
-    # Reconstruction to Image
+    ############################################################################
+    ########################### RECONSTRUCTION #################################
+    ############################################################################
 
     def reconstruct(self, coeff):
 
         if self.nbands != len(coeff[1]):
             raise Exception("Unmatched number of orientations")
 
-        M, N = coeff[0].shape
-        log_rad, angle = math_utils.prepare_grid(M, N)
+        height, width = coeff[0].shape
+        log_rad, angle = math_utils.prepare_grid(height, width)
 
         Xrcos, Yrcos = math_utils.rcosFn(1, -0.5)
         Yrcos  = np.sqrt(Yrcos)
-        YIrcos = np.sqrt(np.abs(1 - Yrcos*Yrcos))
+        YIrcos = np.sqrt(np.abs(1 - Yrcos**2))
 
         lo0mask = pointOp(log_rad, YIrcos, Xrcos)
         hi0mask = pointOp(log_rad, Yrcos, Xrcos)
@@ -185,25 +186,60 @@ class SCFpyr_NumPy():
         tempdft = self._reconstruct_levels(coeff[1:], log_rad, Xrcos, Yrcos, angle)
 
         hidft = np.fft.fftshift(np.fft.fft2(coeff[0]))
+
+        real, imag = hidft.real, hidft.imag
+        print('  [numpy] level final. hidft real ({:.3f}, {:.3f}, {:.3f})'.format(
+            real[0:20,0:20].min().item(), real[0:20,0:20].mean().item(), real[0:20,0:20].max().item()  
+        ))
+        print('  [numpy] level final. hidft imag ({:.3f}, {:.3f}, {:.3f})'.format(
+            imag[0:20,0:20].min().item(), imag[0:20,0:20].mean().item(), imag[0:20,0:20].max().item()  
+        ))
+
         outdft = tempdft * lo0mask + hidft * hi0mask
 
-        reconstruction = np.fft.ifft2(np.fft.ifftshift(outdft))
-        reconstruction = reconstruction.real.astype(int) 
+        real, imag = outdft.real, outdft.imag
+        np.save('./assets/numpy_outdft_real.npy', real)
+        np.save('./assets/numpy_outdft_imag.npy', imag)
+
+        print('  [numpy] level final. outdft real ({:.3f}, {:.3f}, {:.3f})'.format(
+            real[0:20,0:20].min().item(), real[0:20,0:20].mean().item(), real[0:20,0:20].max().item()  
+        ))
+        print('  [numpy] level final. outdft imag ({:.3f}, {:.3f}, {:.3f})'.format(
+            imag[0:20,0:20].min().item(), imag[0:20,0:20].mean().item(), imag[0:20,0:20].max().item()  
+        ))
+
+        import cv2
+        import cortex.vision
+        
+        reconstruction = np.fft.ifftshift(outdft)
+
+        real, imag = reconstruction.real, reconstruction.imag
+        print('  [numpy] level final. ifftshift real ({:.3f}, {:.3f}, {:.3f})'.format(
+            real[0:20,0:20].min().item(), real[0:20,0:20].mean().item(), real[0:20,0:20].max().item()  
+        ))
+        print('  [numpy] level final. ifftshift imag ({:.3f}, {:.3f}, {:.3f})'.format(
+            imag[0:20,0:20].min().item(), imag[0:20,0:20].mean().item(), imag[0:20,0:20].max().item()  
+        ))
+
+        real, imag = reconstruction.real, reconstruction.imag
+        cv2.imshow('numpy real', real)
+        cv2.imshow('numpy imag', imag)
+
+        reconstruction = np.fft.ifft2(reconstruction)
+        reconstruction = reconstruction.real
+
+        print('  [numpy] level final. reconstruction real ({:.3f}, {:.3f}, {:.3f})'.format(
+            reconstruction.min(), reconstruction.mean(), reconstruction.max()  
+        ))
+
         return reconstruction
 
     def _reconstruct_levels(self, coeff, log_rad, Xrcos, Yrcos, angle):
-        
-        print('[numpy] Call to _reconstruct_levels. remaining = {rem}'.format(rem=len(coeff)))
 
         if len(coeff) == 1:
-            print('[numpy] len(coeff)==1')
-            print('[numpy] coeff[0].shape', coeff[0].shape, coeff[0].dtype)
             dft = np.fft.fft2(coeff[0])
-            print('[torch] dft after fft', dft.shape, dft.dtype)
-            tmp = np.fft.fftshift(dft)
-            print('[torch] dft after fftshift', dft.shape, dft.dtype)
-            print('[numpy] here!!')
-            return tmp
+            dft = np.fft.fftshift(dft)
+            return dft
 
         Xrcos = Xrcos - np.log2(self.scale_factor)
 
@@ -228,6 +264,15 @@ class SCFpyr_NumPy():
             banddft = np.fft.fftshift(np.fft.fft2(coeff[0][b]))
             orientdft = orientdft + np.power(np.complex(0, 1), order) * banddft * anglemask * himask
 
+        real = orientdft.real
+        imag = orientdft.imag
+        print('  [numpy] levels remaining {}. orientdft real ({:.3f}, {:.3f}, {:.3f})'.format(
+            len(coeff), real.min().item(), real.mean().item(), real.max().item()  
+        ))
+        print('  [numpy] levels remaining {}. orientdft real ({:.3f}, {:.3f}, {:.3f})'.format(
+            len(coeff), imag.min().item(), imag.mean().item(), imag.max().item()  
+        ))
+
         ####################################################################
         ########## Lowpass component are upsampled and convoluted ##########
         ####################################################################
@@ -245,17 +290,8 @@ class SCFpyr_NumPy():
 
         nresdft = self._reconstruct_levels(coeff[1:], nlog_rad, Xrcos, Yrcos, nangle)
 
-        print('  [numpy] nresdft', nresdft.shape, nresdft.dtype)
-        print('  [numpy] lomask', lomask.shape, lomask.dtype)
-
         resdft = np.zeros(dims, 'complex')
-        print('  [numpy] resdft', resdft.shape, resdft.dtype)
-        print('  [numpy] lostart[0] - loend[0]', lostart[0], loend[0])
-        print('  [numpy] lostart[1] - loend[1]', lostart[1], loend[1])
-
         resdft[lostart[0]:loend[0], lostart[1]:loend[1]] = nresdft * lomask
-
-
 
         return resdft + orientdft
 
