@@ -187,15 +187,24 @@ class SCFpyr_NumPy():
         hidft = np.fft.fftshift(np.fft.fft2(coeff[0]))
         outdft = tempdft * lo0mask + hidft * hi0mask
 
-        reconstruction = np.fft.ifft2(np.fft.ifftshift(outdft)).real.astype(int)
+        reconstruction = np.fft.ifft2(np.fft.ifftshift(outdft))
+        reconstruction = reconstruction.real.astype(int) 
         return reconstruction
 
     def _reconstruct_levels(self, coeff, log_rad, Xrcos, Yrcos, angle):
+        
+        print('[numpy] Call to _reconstruct_levels. remaining = {rem}'.format(rem=len(coeff)))
 
         if len(coeff) == 1:
-            return np.fft.fftshift(np.fft.fft2(coeff[0]))
+            print('[numpy] len(coeff)==1')
+            print('[numpy] coeff[0].shape', coeff[0].shape, coeff[0].dtype)
+            dft = np.fft.fft2(coeff[0])
+            print('[torch] dft after fft', dft.shape, dft.dtype)
+            tmp = np.fft.fftshift(dft)
+            print('[torch] dft after fftshift', dft.shape, dft.dtype)
+            print('[numpy] here!!')
+            return tmp
 
-    
         Xrcos = Xrcos - np.log2(self.scale_factor)
 
         ####################################################################
@@ -235,8 +244,18 @@ class SCFpyr_NumPy():
         lomask = pointOp(nlog_rad, YIrcos, Xrcos)
 
         nresdft = self._reconstruct_levels(coeff[1:], nlog_rad, Xrcos, Yrcos, nangle)
+
+        print('  [numpy] nresdft', nresdft.shape, nresdft.dtype)
+        print('  [numpy] lomask', lomask.shape, lomask.dtype)
+
         resdft = np.zeros(dims, 'complex')
+        print('  [numpy] resdft', resdft.shape, resdft.dtype)
+        print('  [numpy] lostart[0] - loend[0]', lostart[0], loend[0])
+        print('  [numpy] lostart[1] - loend[1]', lostart[1], loend[1])
+
         resdft[lostart[0]:loend[0], lostart[1]:loend[1]] = nresdft * lomask
+
+
 
         return resdft + orientdft
 

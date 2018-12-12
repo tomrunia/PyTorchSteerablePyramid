@@ -48,6 +48,8 @@ pyr_numpy = SCFpyr_NumPy(pyr_height, pyr_nbands, scale_factor=2)
 coeff_numpy = pyr_numpy.build(image)
 reconstruction_numpy = pyr_numpy.reconstruct(coeff_numpy)
 
+print('#'*60)
+
 ################################################################################
 # PyTorch
 
@@ -59,6 +61,7 @@ im_batch = im_batch.to(device).float()
 pyr_torch = SCFpyr_PyTorch(pyr_height, pyr_nbands, device=device)
 coeff_torch = pyr_torch.build(im_batch)
 reconstruction_torch = pyr_torch.reconstruct(coeff_torch)
+reconstruction_torch = reconstruction_torch.cpu().numpy()
 
 # Just extract a single example from the batch
 # Also moves the example to CPU and NumPy
@@ -122,9 +125,18 @@ for level, _ in enumerate(coeff_numpy):
 coeff_grid_numpy = utils.make_grid_coeff(coeff_numpy, normalize=True)
 coeff_grid_torch = utils.make_grid_coeff(coeff_torch, normalize=True)
 
+import cortex.vision
+
+reconstruction_torch = np.ascontiguousarray(reconstruction_torch[0], np.float32)
+reconstruction_numpy = np.ascontiguousarray(reconstruction_numpy, np.float32)
+
+reconstruction_torch = cortex.vision.normalize_for_display(reconstruction_torch)
+reconstruction_numpy = cortex.vision.normalize_for_display(reconstruction_numpy)
+
 cv2.imshow('image', image)
 cv2.imshow('coeff numpy', coeff_grid_numpy)
 cv2.imshow('coeff torch', coeff_grid_torch)
 cv2.imshow('reconstruction numpy', reconstruction_numpy)
+cv2.imshow('reconstruction torch', reconstruction_torch)
 
 cv2.waitKey(0)
