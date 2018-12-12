@@ -232,23 +232,18 @@ class SCFpyr_PyTorch(object):
         
         outdft = tempdft * lo0mask + hidft * hi0mask
 
+        # TODO: check these ops (!)
         reconstruction = math_utils.batch_fftshift2d(outdft)
         reconstruction = torch.ifft(reconstruction, signal_ndim=2)
         reconstruction_real = torch.unbind(reconstruction, -1)[0]
-        return reconstruction_real.int()
+
+        return reconstruction_real
 
     def _reconstruct_levels(self, coeff, log_rad, Xrcos, Yrcos, angle):
 
-        print('[torch] Call to _reconstruct_levels. remaining = {rem}'.format(rem=len(coeff)))
-
         if len(coeff) == 1:
-            print('[torch] len(coeff)==1')
-            print('[torch] coeff[0].shape', coeff[0].shape)
             dft = torch.rfft(coeff[0], signal_ndim=2, onesided=False)
-            print('[torch] dft after fft', dft.shape)
             dft = math_utils.batch_fftshift2d(dft)
-            print('[torch] dft after fftshift', dft.shape)
-            print('[torch] here!!')
             return dft
 
         Xrcos = Xrcos - np.log2(self.scale_factor)
@@ -303,6 +298,9 @@ class SCFpyr_PyTorch(object):
 
         ################################################################################
         
+        # batch_size = len(coeff[0][0])
+        # dims = np.array(coeff[0][0].shape[1:3])
+
         # dims = np.array(coeff[0][0].shape[1:3])
         # lostart = (np.ceil((dims+0.5)/2) - np.ceil((np.ceil((dims-0.5)/2)+0.5)/2)).astype(np.int32)
         # loend = lostart + np.ceil((dims-0.5)/2).astype(np.int32)
@@ -311,10 +309,12 @@ class SCFpyr_PyTorch(object):
         # YIrcos = np.sqrt(np.abs(1 - Yrcos * Yrcos))
 
         # # Filtering
-        # YIrcos = np.abs(np.sqrt(1 - Yrcos**2))
         # lomask = pointOp(log_rad, YIrcos, Xrcos)
-        # lomask = torch.from_numpy(lomask[None,:,:,None]).float()
-        # lomask = lomask.to(self.device)
+        # lomask = torch.from_numpy(lomask[None,:,:,None])
+        # lomask = lomask..float().to(self.device)
+
+        ################################################################################
+        # WORKS:
         
         batch_size = len(coeff[0][0])
         dims = np.array(coeff[0][0].shape[1:3])
@@ -331,10 +331,11 @@ class SCFpyr_PyTorch(object):
         lomask = torch.from_numpy(lomask[None,:,:,None])
         lomask = lomask.float().to(self.device)
 
+        ################################################################################
+
         # Recursive call for image reconstruction        
         nresdft = self._reconstruct_levels(coeff[1:], nlog_rad, Xrcos, Yrcos, nangle)
 
-        print(dims)
         resdft = torch.zeros_like(coeff[0][0]).to(self.device)
         # nresdft is of incorrect size [1,25,13,2]
         # lomask of shape [1,25,25,1]
