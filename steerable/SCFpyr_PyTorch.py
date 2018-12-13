@@ -18,12 +18,12 @@ from __future__ import print_function
 
 import numpy as np
 import torch
-
 from scipy.misc import factorial
 
 import steerable.math_utils as math_utils
 pointOp = math_utils.pointOp
 
+################################################################################
 ################################################################################
 
 
@@ -118,7 +118,6 @@ class SCFpyr_PyTorch(object):
         hi0_real = torch.unbind(hi0, -1)[0]
         coeff.insert(0, hi0_real)
         return coeff
-
 
     def _build_levels(self, lodft, log_rad, angle, Xrcos, Yrcos, height):
         
@@ -229,71 +228,22 @@ class SCFpyr_PyTorch(object):
         # Start recursive reconstruction
         tempdft = self._reconstruct_levels(coeff[1:], log_rad, Xrcos, Yrcos, angle)
 
-        ################################################################################
-        # This NumPy reconstruction still gives the wrong result, so mistake is somewhere before
+        hidft = torch.rfft(coeff[0], signal_ndim=2, onesided=False)
+        hidft = math_utils.batch_fftshift2d(hidft)
 
-        tempdft = tempdft[0].cpu().numpy()
-        tempdft = tempdft[:,:,0] + 1j*tempdft[:,:,1]
-
-        lo0mask = pointOp(log_rad, YIrcos, Xrcos)
-        hi0mask = pointOp(log_rad, Yrcos, Xrcos)
-        
-        coeff_0 = coeff[0].cpu().numpy()[0,]
-        
-        hidft = np.fft.fftshift(np.fft.fft2(coeff_0))
         outdft = tempdft * lo0mask + hidft * hi0mask
 
-        
-        real = outdft.real
-        imag = outdft.imag
-        print('  [torch] levels remaining {}. outdft real ({:.3f}, {:.3f}, {:.3f})'.format(
-            len(coeff), real.mean().item(), real.std().item(), real.sum().item()  
-        ))
-        print('  [torch] levels remaining {}. outdft imag ({:.3f}, {:.3f}, {:.3f})'.format(
-            len(coeff), imag.mean().item(), imag.std().item(), imag.sum().item()  
-        ))
-
-        reconstruction = np.fft.ifftshift(outdft)
-        reconstruction = np.fft.ifft2(reconstruction)
-
-        real = reconstruction.real
-        imag = reconstruction.imag
-        print('  [torch] levels remaining {}. outdft real ({:.3f}, {:.3f}, {:.3f})'.format(
-            len(coeff), real.mean().item(), real.std().item(), real.sum().item()  
-        ))
-        print('  [torch] levels remaining {}. outdft imag ({:.3f}, {:.3f}, {:.3f})'.format(
-            len(coeff), imag.mean().item(), imag.std().item(), imag.sum().item()  
-        ))
-
-        reconstruction = reconstruction.real.astype(np.uint8)
+        reconstruction = math_utils.batch_ifftshift2d(outdft)
+        reconstruction = torch.ifft(reconstruction, signal_ndim=2)
+        reconstruction = torch.unbind(reconstruction, -1)[0]  # real
 
         return reconstruction
-
-        ################################################################################
-
-        # hidft = torch.rfft(coeff[0], signal_ndim=2, onesided=False)
-        # hidft = math_utils.batch_fftshift2d(hidft)
-        # outdft = tempdft * lo0mask + hidft * hi0mask
-
-        # reconstruction = torch.ifft(outdft, signal_ndim=2) #, onesided=False)
-        # reconstruction_real = torch.unbind(reconstruction, -1)[0]
-        # return reconstruction_real
 
     def _reconstruct_levels(self, coeff, log_rad, Xrcos, Yrcos, angle):
 
         if len(coeff) == 1:
             dft = torch.rfft(coeff[0], signal_ndim=2, onesided=False)
             dft = math_utils.batch_fftshift2d(dft)
-
-            real, imag = torch.unbind(dft, -1)
-            real = real[0,].cpu().numpy()
-            imag = imag[0,].cpu().numpy()
-            print('  [torch] levels remaining {}. dft real ({:.3f}, {:.3f}, {:.3f})'.format(
-                len(coeff), real.mean().item(), real.std().item(), real.sum().item()  
-            ))
-            print('  [torch] levels remaining {}. dft imag ({:.3f}, {:.3f}, {:.3f})'.format(
-                len(coeff), imag.mean().item(), imag.std().item(), imag.sum().item()  
-            ))
             return dft
 
         Xrcos = Xrcos - np.log2(self.scale_factor)
@@ -321,26 +271,13 @@ class SCFpyr_PyTorch(object):
             banddft = torch.fft(coeff[0][b], signal_ndim=2)
             banddft = math_utils.batch_fftshift2d(banddft)
 
-            # Now multiply with complex number
-            # (x+yi)(u+vi) = (xu-yv) + (xv+yu)i
+            banddft = banddft * anglemask * himask
             banddft = torch.unbind(banddft, -1)
-            # banddft_real = self.complex_fact_construct.real*banddft[0] - self.complex_fact_construct.imag*banddft[1]
-            # banddft_imag = self.complex_fact_construct.real*banddft[1] + self.complex_fact_construct.imag*banddft[0]
             banddft_real = self.complex_fact_reconstruct.real*banddft[0] - self.complex_fact_reconstruct.imag*banddft[1]
             banddft_imag = self.complex_fact_reconstruct.real*banddft[1] + self.complex_fact_reconstruct.imag*banddft[0]
             banddft = torch.stack((banddft_real, banddft_imag), -1)
-            banddft = banddft * anglemask * himask
-            orientdft += banddft
 
-        real, imag = torch.unbind(orientdft, -1)
-        real = real[0,].cpu().numpy()
-        imag = imag[0,].cpu().numpy()
-        print('  [torch] levels remaining {}. orientdft real ({:.3f}, {:.3f}, {:.3f})'.format(
-            len(coeff), real.mean().item(), real.std().item(), real.sum().item()  
-        ))
-        print('  [torch] levels remaining {}. orientdft imag ({:.3f}, {:.3f}, {:.3f})'.format(
-            len(coeff), imag.mean().item(), imag.std().item(), imag.sum().item()  
-        ))
+            orientdft = orientdft + banddft
 
         ####################################################################
         ########## Lowpass component are upsampled and convoluted ##########
@@ -356,10 +293,6 @@ class SCFpyr_PyTorch(object):
         YIrcos = np.sqrt(np.abs(1 - Yrcos**2))
         lomask = pointOp(nlog_rad, YIrcos, Xrcos)
 
-        print('  [torch] levels remaining {}. nlog_rad = {:.3f}, nangle = {:.3f}, YIrcos = {:.3f}, lomask = {:.3f}'.format(
-            len(coeff), nlog_rad.sum(), nangle.sum(), YIrcos.sum(), lomask.sum()
-        ))
-
         # Filtering
         lomask = pointOp(nlog_rad, YIrcos, Xrcos)
         lomask = torch.from_numpy(lomask[None,:,:,None])
@@ -373,36 +306,4 @@ class SCFpyr_PyTorch(object):
         resdft = torch.zeros_like(coeff[0][0]).to(self.device)
         resdft[:,lostart[0]:loend[0], lostart[1]:loend[1],:] = nresdft * lomask
 
-        real, imag = torch.unbind(nresdft, -1)
-        real = real[0,].cpu().numpy()
-        imag = imag[0,].cpu().numpy()
-        print('  [torch] levels remaining {}. nresdft real ({:.3f}, {:.3f}, {:.3f})'.format(
-            len(coeff), real.mean().item(), real.std().item(), real.sum().item()  
-        ))
-        print('  [torch] levels remaining {}. nresdft imag ({:.3f}, {:.3f}, {:.3f})'.format(
-            len(coeff), imag.mean().item(), imag.std().item(), imag.sum().item()  
-        ))
-
         return resdft + orientdft
-
-################################################################################
-################################################################################
-# Work in Progress
-
-class TorchBatchedPyramid():
-
-    def __init__(self, height, nbands):
-        self._height = height  # including low-pass and high-pass
-        self._nbands = nbands  # number of orientation bands
-        self._coeff = [None]*self._nbands
-    
-    def set_level(self, level, coeff):
-        assert len(coeff) == self._nbands
-        assert coeff.shape[-1] == 2, 'Last dim must be 2 encoding real,imag'
-        self._coeff[level] = coeff
-
-    def level_size(self, level):
-        if level in (0,self._nbands-1):
-            # Low-pass and High-pass
-            return self._coeff[level].shape[1:3]
-        return self._coeff[level][0].shape[1:3]

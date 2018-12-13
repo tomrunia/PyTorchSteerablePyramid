@@ -143,7 +143,7 @@ class SCFpyr_NumPy():
 
             # Both are tuples of size 2
             low_ind_start = (np.ceil((dims+0.5)/2) - np.ceil((np.ceil((dims-0.5)/2)+0.5)/2)).astype(int)
-            low_ind_end   = (low_ind_start + np.ceil((dims-0.5)/2)).astype(int)
+            low_ind_end = (low_ind_start + np.ceil((dims-0.5)/2)).astype(int)
           
             # Selection
             log_rad = log_rad[low_ind_start[0]:low_ind_end[0], low_ind_start[1]:low_ind_end[1]]
@@ -188,28 +188,9 @@ class SCFpyr_NumPy():
         hidft = np.fft.fftshift(np.fft.fft2(coeff[0]))
         outdft = tempdft * lo0mask + hidft * hi0mask
 
-        real = outdft.real
-        imag = outdft.imag
-        print('  [numpy] levels remaining {}. outdft real ({:.3f}, {:.3f}, {:.3f})'.format(
-            len(coeff), real.mean().item(), real.std().item(), real.sum().item()  
-        ))
-        print('  [numpy] levels remaining {}. outdft imag ({:.3f}, {:.3f}, {:.3f})'.format(
-            len(coeff), imag.mean().item(), imag.std().item(), imag.sum().item()  
-        ))
-
         reconstruction = np.fft.ifftshift(outdft)
         reconstruction = np.fft.ifft2(reconstruction)
-
-        real = reconstruction.real
-        imag = reconstruction.imag
-        print('  [numpy] levels remaining {}. outdft real ({:.3f}, {:.3f}, {:.3f})'.format(
-            len(coeff), real.mean().item(), real.std().item(), real.sum().item()  
-        ))
-        print('  [numpy] levels remaining {}. outdft imag ({:.3f}, {:.3f}, {:.3f})'.format(
-            len(coeff), imag.mean().item(), imag.std().item(), imag.sum().item()  
-        ))
-
-        reconstruction = reconstruction.real.astype(np.uint8)
+        reconstruction = reconstruction.real
 
         return reconstruction
 
@@ -218,15 +199,6 @@ class SCFpyr_NumPy():
         if len(coeff) == 1:
             dft = np.fft.fft2(coeff[0])
             dft = np.fft.fftshift(dft)
-
-            real, imag = dft.real, dft.imag
-            print('  [numpy] levels remaining {}. dft real ({:.3f}, {:.3f}, {:.3f})'.format(
-                len(coeff), real.mean().item(), real.std().item(), real.sum().item()  
-            ))
-            print('  [numpy] levels remaining {}. dft imag ({:.3f}, {:.3f}, {:.3f})'.format(
-                len(coeff), imag.mean().item(), imag.std().item(), imag.sum().item()  
-            ))
-
             return dft
 
         Xrcos = Xrcos - np.log2(self.scale_factor)
@@ -246,20 +218,10 @@ class SCFpyr_NumPy():
         orientdft = np.zeros(coeff[0][0].shape)
 
         for b in range(self.nbands):
-
             anglemask = pointOp(angle, Ycosn, Xcosn + np.pi * b/self.nbands)
-
-            banddft = np.fft.fftshift(np.fft.fft2(coeff[0][b]))
+            banddft = np.fft.fft2(coeff[0][b])
+            banddft = np.fft.fftshift(banddft)
             orientdft = orientdft + np.power(np.complex(0, 1), order) * banddft * anglemask * himask
-
-        real = orientdft.real
-        imag = orientdft.imag
-        print('  [numpy] levels remaining {}. orientdft real ({:.3f}, {:.3f}, {:.3f})'.format(
-            len(coeff), real.mean().item(), real.std().item(), real.sum().item()  
-        ))
-        print('  [numpy] levels remaining {}. orientdft imag ({:.3f}, {:.3f}, {:.3f})'.format(
-            len(coeff), imag.mean().item(), imag.std().item(), imag.sum().item()  
-        ))
 
         ####################################################################
         ########## Lowpass component are upsampled and convoluted ##########
@@ -275,10 +237,6 @@ class SCFpyr_NumPy():
         YIrcos = np.sqrt(np.abs(1 - Yrcos**2))
         lomask = pointOp(nlog_rad, YIrcos, Xrcos)
 
-        print('  [numpy] levels remaining {}. nlog_rad = {:.3f}, nangle = {:.3f}, YIrcos = {:.3f}, lomask = {:.3f}'.format(
-            len(coeff), nlog_rad.sum(), nangle.sum(), YIrcos.sum(), lomask.sum()
-        ))
-
         ################################################################################
 
         # Recursive call for image reconstruction
@@ -287,40 +245,4 @@ class SCFpyr_NumPy():
         resdft = np.zeros(dims, 'complex')
         resdft[lostart[0]:loend[0], lostart[1]:loend[1]] = nresdft * lomask
 
-        real, imag = nresdft.real, nresdft.imag
-        print('  [numpy] levels remaining {}. nresdft real ({:.3f}, {:.3f}, {:.3f})'.format(
-            len(coeff), real.mean().item(), real.std().item(), real.sum().item()  
-        ))
-        print('  [numpy] levels remaining {}. nresdft imag ({:.3f}, {:.3f}, {:.3f})'.format(
-            len(coeff), imag.mean().item(), imag.std().item(), imag.sum().item()  
-        ))
-
         return resdft + orientdft
-
-
-################################################################################
-################################################################################
-# Work in Progress
-
-class ComplexSteerablePyramid():
-
-    def __init__(self, height, nbands):
-        self._height = height  # including low-pass and high-pass
-        self._nbands = nbands  # number of orientation bands
-        self._coeff = [None]*self._height
-    
-    def set_level(self, level, coeff):
-        self._coeff[level] = coeff
-    
-    def get_level(self, level):
-        return self._coeff[level]
-
-    def level_size(self, level):
-        if level == 0:
-            # High-pass
-            return self._coeff[level].shape
-        elif level == self._nbands:
-            # Low-pass
-            return self._coeff[level][0].shape
-        # Intermediate levels
-        return self._coeff[level][0].shape

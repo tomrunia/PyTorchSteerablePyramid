@@ -32,8 +32,11 @@ def roll_n(X, axis, n):
 def batch_fftshift2d(x):
     real, imag = torch.unbind(x, -1)
     for dim in range(1, len(real.size())):
-        real = roll_n(real, axis=dim, n=real.size(dim)//2)
-        imag = roll_n(imag, axis=dim, n=imag.size(dim)//2)
+        n_shift = real.size(dim)//2
+        if real.size(dim) % 2 != 0:
+            n_shift += 1  # for odd-sized images
+        real = roll_n(real, axis=dim, n=n_shift)
+        imag = roll_n(imag, axis=dim, n=n_shift)
     return torch.stack((real, imag), -1)  # last dim=2 (real&imag)
 
 def batch_ifftshift2d(x):
@@ -75,24 +78,30 @@ def getlist(coeff):
     return straight
 
 ################################################################################
-# Alternative fftshift implementation
+# NumPy reference implementation (fftshift and ifftshift)
 
-# def batch_flip_halves(x, axis):
-#     split = torch.chunk(x, 2, axis)
-#     return torch.cat((split[1], split[0]), dim=axis)
-
-# def batch_fftshift2d_v1(x):
-#     assert isinstance(x, torch.Tensor), 'input must be a torch.Tensor'
-#     assert x.dim() == 4, 'input tensor must be of shape [N,H,W,2]'
-#     assert x.shape[-1] == 2, 'input tensor must be of shape [N,H,W,2]'
-#     x = batch_flip_halves(x, axis=1)  # top,bottom
-#     x = batch_flip_halves(x, axis=2)  # left,right
-#     return x
-
-# def batch_ifftshift2d_v1(x):
-#     ndim = x.dim()
-#     assert ndim == 4, 'input tensor must be of shape [N,H,W,2]'
-#     assert x.shape[-1] == 2, 'input tensor must be of shape [N,H,W,2]'
-#     x = batch_flip_halves(x, axis=2)  # left,right
-#     x = batch_flip_halves(x, axis=1)  # top,bottom
-#     return x
+# def fftshift(x, axes=None):
+#     """
+#     Shift the zero-frequency component to the center of the spectrum.
+#     This function swaps half-spaces for all axes listed (defaults to all).
+#     Note that ``y[0]`` is the Nyquist component only if ``len(x)`` is even.
+#     Parameters
+#     """
+#     x = np.asarray(x)
+#     if axes is None:
+#         axes = tuple(range(x.ndim))
+#         shift = [dim // 2 for dim in x.shape]
+#     shift = [x.shape[ax] // 2 for ax in axes]
+#     return np.roll(x, shift, axes)
+#
+# def ifftshift(x, axes=None):
+#     """
+#     The inverse of `fftshift`. Although identical for even-length `x`, the
+#     functions differ by one sample for odd-length `x`.
+#     """
+#     x = np.asarray(x)
+#     if axes is None:
+#         axes = tuple(range(x.ndim))
+#         shift = [-(dim // 2) for dim in x.shape]
+#     shift = [-(x.shape[ax] // 2) for ax in axes]
+#     return np.roll(x, shift, axes)
