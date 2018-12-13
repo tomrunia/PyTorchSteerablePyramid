@@ -139,4 +139,4 @@ def make_grid_coeff(coeff, normalize=True):
     out[currentx: currentx+m, currenty: currenty+n] = 255 * coeff[-1]/coeff[-1].max()
     out[0,:] = 255
     out[:,0] = 255
-    return out
+    return out.astype(np.uint8)
