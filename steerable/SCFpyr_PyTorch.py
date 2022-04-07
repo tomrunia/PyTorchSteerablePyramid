@@ -18,7 +18,12 @@ from __future__ import print_function
 
 import numpy as np
 import torch
-from scipy.misc import factorial
+
+#support for mulitple versions of scipy
+try:
+    from scipy.misc import factorial
+except ImportError:
+    from scipy.special import factorial
 
 import steerable.math_utils as math_utils
 pointOp = math_utils.pointOp
