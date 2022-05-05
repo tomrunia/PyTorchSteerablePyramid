@@ -69,6 +69,44 @@ def show_image_batch(im_batch):
     plt.show()
     return im_batch
 
+def vectorize_batch(coeff_batch, real=True):
+    '''
+    Given the batched Complex Steerable Pyramid, create a vectorized version which is 2D, batch by an ordered vector containing each pyramid, flattened. Store this as an all-real pyramid with complex pyramid split into two, or as a complex pyramid.
+    
+     Args:
+        coeff_batch (list): list containing low-pass, high-pass and pyr levels
+        real (bool, optional): Store pyramid as all real values, with complex pyramid stored as vectorized real, imaginary values
+    
+    Returns:
+        vector_pyr (tensor): tensor of dimensions (batch, vectorsize), where each vector contains the entire steerable pyramid, collapsed.
+    
+    '''
+    if not isinstance(coeff_batch, list):
+        raise ValueError('Batch of coefficients must be a list')
+    
+    #first element is high pass
+    vector_pyr = torch.flatten(coeff_batch[0],start_dim=1)
+    
+    #loop through levels and stack them on top
+    for i in range(1,len(coeff_batch)-1):
+        #loop through orientations within each level
+        for orientation in coeff_batch[i]:
+            #if we want a real only pyramid, just use already separated representation
+            if(real):
+                print(orientation.shape)
+                level_vector = torch.flatten(orientation,start_dim=1)
+            #if we want a complex pyramid, need to create it with real and imaginary parts
+            else:
+                level_vector = torch.flatten(orientation[:,:,:,0] + 1j*orientation[:,:,:,1],start_dim=1)
+            #Stack this level vector on our pyramid
+            vector_pyr = torch.concat((vector_pyr,level_vector),dim=-1)
+            
+    #last element is low pass. Stack on top
+    vector_pyr = torch.concat((vector_pyr,torch.flatten(coeff_batch[-1],start_dim=1)),dim=-1)
+            
+    #return final batched tensor
+    return(vector_pyr)
+    
 def extract_from_batch(coeff_batch, example_idx=0):
     '''
     Given the batched Complex Steerable Pyramid, extract the coefficients
