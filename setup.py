@@ -2,7 +2,7 @@ import sys
 from setuptools import setup
 
 setup(
-    name='steerable_pytorch',
+    name='steerable',
     version='0.1',
     author='Tom Runia',
     author_email='tomrunia@gmail.com',
@@ -10,6 +10,6 @@ setup(
     description='Complex Steerable Pyramids in PyTorch',
     long_description='Fast CPU/CUDA implementation of the Complex Steerable Pyramid in PyTorch.',
     license='MIT',
-    packages=['steerable_pytorch'],
+    packages=['steerable'],
     scripts=[]
 )
