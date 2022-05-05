@@ -2,7 +2,7 @@ import sys
 from setuptools import setup
 
 setup(
-    name='steerable_pytorch',
+    name='steerable',
     version='0.1',
     author='Tom Runia',
     author_email='tomrunia@gmail.com',
