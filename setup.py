@@ -10,6 +10,6 @@ setup(
     description='Complex Steerable Pyramids in PyTorch',
     long_description='Fast CPU/CUDA implementation of the Complex Steerable Pyramid in PyTorch.',
     license='MIT',
-    packages=['steerable_pytorch'],
+    packages=['steerable'],
     scripts=[]
 )
